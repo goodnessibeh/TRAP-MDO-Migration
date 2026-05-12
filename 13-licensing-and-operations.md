@@ -1,7 +1,7 @@
 # Licensing and Operational Considerations
 
 What we must hold to make any of this work, what each capability costs in
-ongoing operational terms, and the SOC ergonomics that follow from the
+ongoing operational terms, and our SOC ergonomics that follow from the
 architecture choices in this blueprint.
 
 ---
@@ -44,7 +44,7 @@ What is genuinely optional but worth considering:
 
 The single largest variable cost. Plan for it before we connect anything.
 
-For a 10k-mailbox tenant with the **MVP table set** enabled (EmailEvents,
+For a 10k-mailbox tenant with the **OOTB deployment table set** enabled (EmailEvents,
 EmailPostDeliveryEvents, AlertInfo, AlertEvidence, OfficeActivity), expect
 ingestion of approximately:
 
@@ -54,9 +54,9 @@ ingestion of approximately:
 | EmailPostDeliveryEvents | 0.05 to 0.2 GB/day |
 | AlertInfo + AlertEvidence | 0.05 to 0.2 GB/day |
 | OfficeActivity | 0.5 to 2 GB/day |
-| **Total MVP** | **~1 to 4 GB/day** |
+| **Total OOTB deployment** | **~1 to 4 GB/day** |
 
-Adding the **Phase 2/3 enhancements** turns on the high-cardinality
+Adding the **engineered enhancements** turns on the high-cardinality
 tables:
 
 | Source | Volume |
@@ -64,7 +64,7 @@ tables:
 | EmailUrlInfo | 0.5 to 1.5 GB/day |
 | EmailAttachmentInfo | 0.1 to 0.5 GB/day |
 | UrlClickEvents | 0.5 to 1.5 GB/day |
-| **Total Phase 2/3 add-on** | **~1 to 3.5 GB/day** |
+| **Total engineered phase add-on** | **~1 to 3.5 GB/day** |
 
 Combined: roughly **3 to 7 GB/day** for a 10k-mailbox tenant running the
 full architecture. Scale linearly with mailbox count for first-order
@@ -74,7 +74,7 @@ senders) push the ratio higher.
 Cost implications at typical Sentinel pay-as-you-go rate (region-dependent,
 roughly 2 to 4 USD per GB ingested):
 
-* MVP only: ~30 to 480 USD/month for 10k mailboxes.
+* OOTB deployment only: ~30 to 480 USD/month for 10k mailboxes.
 * Full: ~180 to 840 USD/month for 10k mailboxes.
 
 Two ways to manage this:
@@ -82,8 +82,8 @@ Two ways to manage this:
 1. **Commitment tier**: At >100 GB/day, the commitment tier saves
    substantially over PAYG. At our scale (~5 GB/day) it does not.
 2. **Selective table opt-in**: The Defender XDR connector lets us opt-in
-   per-table. The MVP turns on the small set; only enable the
-   high-cardinality tables when we start building Phase 2/3 hunting that
+   per-table. The OOTB deployment turns on the small set; only enable the
+   high-cardinality tables when we start building engineered-phase hunting that
    needs them.
 3. **Auxiliary log tier**: Sentinel introduced an auxiliary tier with
    substantially lower per-GB ingestion cost but higher query cost.
@@ -140,32 +140,32 @@ we are about to hit a wall.
 
 ## 5. SOC operating shape after migration
 
-Drawing on the four pilot deployments we have observed:
+What changes for the SOC, qualitatively:
 
-| Metric | TRAP baseline | MDO + Sentinel (this blueprint) |
+| Dimension | TRAP baseline | MDO + Sentinel (this blueprint) |
 |---|---|---|
-| Phish triage time per incident | 5 to 10 min | 2 to 5 min (Defender XDR portal is faster than TRAP UI for most cases) |
-| MTTR for user-reported phish | 3 to 8 min | 2 to 5 min (AIR latency dominates, ~30 to 120s; Take Action fan-out 30 to 60s for ≤500 recipients) |
-| Time to retract a 1000-recipient campaign | 5 to 15 min | 1 to 3 min (Defender XDR Take Action handles this in one API call) |
-| False positive recovery | 1 to 3 min via TRAP UI undo | 1 to 3 min via Action Center undo |
-| Analyst console count | TRAP UI + email gateway UI + SIEM | Defender XDR + Sentinel (+ optional Logic App run history viewer) |
-| Daily SOC FTE for phishing | 0.5 to 1 FTE for 10k mailbox tenant | 0.3 to 0.7 FTE for 10k mailbox tenant |
+| Phish triage console count | TRAP UI plus email gateway UI plus SIEM | Defender XDR plus Sentinel (plus optional Logic App run history viewer) |
+| Time to retract a large-fanout campaign | Per-mailbox iteration in TRAP | One Defender XDR Take Action call across the cluster |
+| Mean time to remediation for user-reported phish | Bounded by analyst attention plus TRAP pull latency | Bounded by AIR investigation latency plus Take Action fan-out (both Microsoft-side, both fast) |
+| False positive recovery | TRAP UI undo | Action Center undo (same shape, similar feel) |
+| Per-incident SOC effort | Higher: TRAP plus gateway plus SIEM context-switching | Lower: one console covers detection, investigation, action |
 
-The biggest contributor to the FTE saving is the unified Defender XDR
+The biggest contributor to the load reduction is the unified Defender XDR
 console replacing the TRAP UI plus the email gateway UI. Analysts spend
-less time hopping between tools. The gain shows up in week 4 or 5 of the
-parallel run, not immediately.
+less time hopping between tools. The gain shows up once analysts have had
+real exposure to Defender XDR Action Center as the primary console; not
+on day one.
 
 Where the operational picture gets worse, not better:
 
 * **Investigating a "did it actually do what we wanted?" question for a
   Logic App run** is heavier than reading TRAP's per-incident activity
-  list. Logic App run history is detailed but verbose. We invested in a
-  Sentinel workbook that summarises run state per incident; it took 8
-  hours of effort and was worth it.
-* **First-week analyst comfort with Defender XDR portal** is uneven. Some
-  analysts take to it immediately; some take 2 weeks. Plan training and
-  pair-shifts.
+  list. Logic App run history is detailed but verbose. We invest in a
+  Sentinel workbook that summarises run state per incident; the
+  investment is worth it.
+* **Analyst comfort with the Defender XDR portal** is uneven at first.
+  Some analysts take to it immediately; some need real reps. Plan
+  training and pair-shifts during Phase 2.
 
 ---
 
@@ -180,7 +180,7 @@ Sentinel workbooks worth building during Phase 1 and 2:
   recommendation-pending per hour. Surfaces the queue-depth issue
   documented in [`12-limitations-and-gaps.md`](./12-limitations-and-gaps.md) §12.
 * **User reporter scoreboard**: KQL Q9 surfaced as a workbook tile. Helps
-  the SOC identify who reports well and who reports a lot.
+  us see who reports well and who reports a lot.
 * **Logic App run health**: per-playbook run counts, success rate, average
   duration, P95 duration. Catches drift before it becomes an incident.
 * **TI sweep effectiveness**: count of TI sweeps that resulted in
@@ -197,7 +197,8 @@ Solutions/MicrosoftDefenderForOffice365 trees.
 
 ## 7. Permissions ongoing review
 
-Quarterly permissions review checklist:
+Recurring permissions review checklist (cadence is up to us; we run it
+often enough that drift gets caught):
 
 * Every Entra app with `Mail.*`, `Mail-Advanced.*`, `ThreatSubmission.*`,
   `ThreatHunting.*`, `MachineActions.*` consented. Confirm scope is still
@@ -207,7 +208,7 @@ Quarterly permissions review checklist:
   Exchange Admin). Confirm assignment is justified.
 * Every managed identity with workspace permissions. Confirm Sentinel
   Reader / Responder / Contributor scope is still appropriate.
-* Search and Purge role group membership. Confirm the SOC L2/L3 tier
+* Search and Purge role group membership. Confirm our L2/L3 SOC tier
   membership is current (people leave; access does not).
 * SecOps mailbox list in Advanced Delivery. Confirm only current SOC
   mailboxes are listed.
@@ -221,7 +222,7 @@ manual portal walks because the underlying API is missing or unreliable.
 
 ## 8. Operational risk register
 
-The top items the SOC director will want to see in the migration risk
+The top items our SOC director will want to see in the migration risk
 register:
 
 | Risk | Probability | Impact | Mitigation |
@@ -256,7 +257,7 @@ architecture:
 Compared to TRAP licensing (typically priced per-user-per-year and varying
 by procurement), a 10k-user TRAP licence runs in the range of low five to
 low six figures USD/year. Replacing TRAP with this stack is typically a
-**net cost reduction**, even before accounting for the SOC FTE savings.
+**net cost reduction**, even before accounting for our SOC FTE savings.
 
 For larger tenants the net savings compound. For smaller (<2k mailbox)
 tenants the savings are smaller but the operational consolidation (one
@@ -264,27 +265,28 @@ console, one identity model, one audit trail) is still worth it.
 
 ---
 
-## 10. What a "good" operational state looks like at month 6
+## 10. What a "good" steady state looks like
 
-If everything in this blueprint is working as designed, six months in we
-should see:
+Once the migration is bedded in and the SOC has settled into the new
+shape, we should see:
 
 * The SOC operates from one console (Defender XDR) for routine work and
   drops into Sentinel for hunting.
-* AIR auto-remediates roughly 60-70% of high-confidence phishing
-  incidents without human approval.
-* Median user-reported-phish MTTR is under 5 minutes.
-* TI sweep playbook is auto-approving roughly 70% of triggers (the
-  KnownBad_Senders watchlist has matured).
-* Reporter Thanks Bridge fires for 100% of user reports; reporter
-  satisfaction surveys (if we do them) trend upward.
+* AIR auto-remediates the majority of high-confidence phishing incidents
+  without human approval.
+* Reporter-phish remediation latency is dominated by Microsoft-side
+  processing time, not by analyst attention.
+* TI sweep playbook is auto-approving the bulk of its triggers because
+  the `KnownBad_Senders` watchlist has matured.
+* Reporter Thanks Bridge fires for every user report; reporter
+  satisfaction surveys (if we run them) trend upward.
 * The Logic App run-health dashboard shows consistent runs with no
   retry-storm or throttling spikes.
 * The permissions review surfaces zero unauthorised additions.
 * Sentinel ingestion cost is stable and within budget.
-* The TRAP installation has been gone for four months and nobody asks
-  about it.
+* The TRAP installation is gone and nobody asks about it.
 
-If two or three of these are not true at month 6, revisit the relevant
-phase output. Usually the gap is a tuning problem (analytics rule
-threshold, automation rule condition) rather than an architecture problem.
+If two or three of these are not true once we are out of the dual-run
+phase, revisit the relevant phase output. Usually the gap is a tuning
+problem (analytics rule threshold, automation rule condition) rather
+than an architecture problem.

@@ -1,9 +1,9 @@
 # KQL Detection and Hunting Library
 
-Production queries that back the analytics rules, automation rules, and
-playbooks elsewhere in this blueprint. Every query is annotated with the
-intent, the table dependencies, and the operational caveats that bit us
-in testing.
+Production queries (in KQL, Kusto Query Language) that back the analytics
+rules, automation rules, and playbooks elsewhere in this blueprint.
+Every query is annotated with the intent, the table dependencies, and
+the operational caveats that bit us in testing.
 
 These are written for the **Defender XDR Advanced Hunting unified schema**.
 Anything that says `let X = _GetWatchlist('...')` assumes we have already

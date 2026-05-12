@@ -1,17 +1,18 @@
 # Logic App Playbook Library
 
-Reference designs for the SOAR layer that bridges Sentinel incidents to the
-Microsoft remediation APIs. Each playbook is presented as an action graph
-(not a full ARM template, that is downstream engineering work) plus the
-identity, scope, and operational caveats. We deliberately keep the action
-count low: most playbooks here are 5 to 15 actions. Anything larger is a
-sign we should split into a parent / child pattern.
+Reference designs for the SOAR layer that bridges Sentinel incidents to
+the Microsoft remediation APIs. Each playbook is presented as an action
+graph (not a full ARM, Azure Resource Manager, template; full templates
+are downstream engineering work), plus the identity, scope, and
+operational caveats. We deliberately keep the action count low: most
+playbooks here are 5 to 15 actions. Anything larger means we should
+split into a parent / child pattern.
 
-All playbooks assume Logic App **Standard** with system-assigned managed
-identity. Where a step requires the Office 365 Outlook connector,
-remember it does not support service principals; we will need a SOC
-service mailbox with an OAuth connection and a CA carve-out for that
-account.
+All playbooks assume Logic App **Standard** with a system-assigned
+managed identity (MI). Where a step requires the Office 365 Outlook
+connector, remember it does not support service principals; we will
+need a SOC service mailbox with an OAuth connection and a CA
+(Conditional Access) carve-out for that account.
 
 ---
 
@@ -160,7 +161,7 @@ analytics rule (KQL Q5).
 * If the TI feed is noisy, we will get a lot of these. Add an automation-
   rule pre-condition that auto-approves when sender domain is on the
   `KnownBad_Senders` watchlist (which gets populated by previous TI hits
-  that the SOC approved). After 30 days, ~70% of TI sweeps auto-approve
+  that we approved). After 30 days, ~70% of TI sweeps auto-approve
   with no human in the loop.
 
 ---
@@ -169,8 +170,8 @@ analytics rule (KQL Q5).
 
 **Trigger:** Microsoft Sentinel incident.
 **Conditions:** title equals "Email reported by user as malware or phish".
-This is the MVP playbook. Documented in
-[`00-MVP-deployment-guide.md`](./00-MVP-deployment-guide.md) §3.3.
+This is the OOTB deployment playbook. Documented in
+[`00-MDO-out-of-the-box-deployment-guide.md`](./00-MDO-out-of-the-box-deployment-guide.md) §3.3.
 
 ```
 1. Extract Reporter UPN from incident.Entities[].Account.UPN
@@ -232,7 +233,7 @@ This is the MVP playbook. Documented in
   boundary, not a workflow problem. The best mitigation is the sister
   control in Q7: alert on auto-forward configuration changes so we catch
   the leak before it happens.
-* Step 4 adds an unfortunate operational reality to the SOC inbox. Many
+* Step 4 adds an unfortunate operational reality to our SOC inbox. Many
   external forwards are legitimate (user forwarded to personal email,
   forwarded to vendor for action). Tag rather than escalate by default.
 
@@ -285,7 +286,7 @@ This is the MVP playbook. Documented in
   Without it, we assume DL coverage equals cluster coverage. They are
   not always equal.
 * Defender XDR Take Action operates on the cluster (NetworkMessageId), not
-  the DL. The DL expansion is therefore audit information for the SOC, not
+  the DL. The DL expansion is therefore audit information for our SOC, not
   input to the remediation API. This is a non-obvious design point.
 
 ---
@@ -333,7 +334,7 @@ go that route, or Teams app for adaptive card approval (recommended).
 * The audit log to a custom Sentinel table is non-optional for VIP-tier
   actions. Auditors will ask who approved what; Action Center History is
   too coarse-grained for VIP-tier scrutiny.
-* Some orgs require dual approval for VIP actions (one analyst, one
+* Some teams require dual approval for VIP actions (one analyst, one
   manager). Add a second adaptive card after step 3, gated on first
   approval, before step 3a runs.
 
@@ -351,7 +352,7 @@ built-in path covers the use case.
 
 ## Cross-cutting design rules we wish we knew earlier
 
-A handful of things we learned the hard way during pilot deployments:
+A handful of things we learned the hard way during staging exercises:
 
 * **Idempotency is non-negotiable.** Logic App runs can be retried by
   Sentinel automation rules under failure conditions we do not control.

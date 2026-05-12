@@ -1,9 +1,10 @@
-# User-Reported Phishing & Abuse Mailbox Pipeline
+# User-Reported Phishing and Abuse Mailbox Pipeline
 
-> The Microsoft replacement for Proofpoint CLEAR (PhishAlarm + PhishAlarm
-> Analyzer + abuse mailbox + TRAP). Most of this is **already in MDO P2
-> natively**; the engineering layer is small but specific.
-
+> The Microsoft replacement for Proofpoint CLEAR (PhishAlarm plus
+> PhishAlarm Analyzer plus abuse mailbox plus TRAP). Most of this is
+> already in MDO Plan 2 natively; the engineering layer is small but
+> specific.
+>
 ---
 
 ## 1. Native vs engineered split
@@ -250,8 +251,8 @@ sequenceDiagram
 
 ### 8.1 Reporter Thanks Bridge (always-thank)
 
-See [`00-MVP-deployment-guide.md`](./00-MVP-deployment-guide.md) §3.3.
-This is the only Logic App in the MVP. It guarantees the reporter
+See [`00-MDO-out-of-the-box-deployment-guide.md`](./00-MDO-out-of-the-box-deployment-guide.md) §3.3.
+This is the only Logic App in the OOTB deployment. It guarantees the reporter
 receives an acknowledgement even when AIR's Auto Feedback skips them.
 
 ### 8.2 Custom abuse-mailbox ingestion (when not using built-in Report)
@@ -306,7 +307,7 @@ SecurityAlert
 | order by Reports desc
 ```
 
-Surface in a Sentinel workbook for the SOC. Boost
+Surface in a Sentinel workbook for our SOC. Boost
 high-precision reporters' alerts (analytics rule with watchlist
 `HighPrecision_Reporters`).
 

@@ -1,12 +1,12 @@
-# Microsoft Graph + Exchange Online: Programmatic Remediation Reference
+# Microsoft Graph and Exchange Online: Programmatic Remediation Reference
 
 > The data plane for the TRAP-replacement architecture. Three remediation
 > APIs, three permission models, three sets of limits, and one critical
-> identity migration (ApplicationImpersonation removal, March 2025).
-> Defender XDR Take Action API is in [`05-defender-xdr-air-zap.md`](./05-defender-xdr-air-zap.md);
-> this document covers Microsoft Graph email APIs, Exchange Online
-> PowerShell, Compliance Search-Action, and the identity model that ties
-> them together.
+> identity migration (the ApplicationImpersonation removal, March 2025).
+> Defender XDR Take Action API is in
+> [`05-defender-xdr-air-zap.md`](./05-defender-xdr-air-zap.md); this
+> document covers Microsoft Graph email APIs, EXO PowerShell, Compliance
+> Search-Action, and the identity model that ties them together.
 
 ---
 

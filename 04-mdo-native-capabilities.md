@@ -1,12 +1,10 @@
 # Microsoft Defender for Office 365: Native Capability Reference
 
 > Implementation reference for the MDO surface area that replaces TRAP's
-> detection, prevention, and built-in remediation primitives. Cited against
-> Microsoft Learn throughout. Reading order: Plan tier matrix → ZAP →
-> anti-phish/anti-spam policies → TABL → Quarantine → Submissions surface →
-> Threat Explorer → Campaigns → Email entity.
-
----
+> detection, prevention, and built-in remediation primitives. Cited
+> against Microsoft Learn throughout. Reading order: plan tier matrix,
+> ZAP, anti-phish and anti-spam policies, TABL, Quarantine, Submissions
+> surface, Threat Explorer, Campaigns, Email entity.---
 
 ## 1. Plan tier feature matrix
 

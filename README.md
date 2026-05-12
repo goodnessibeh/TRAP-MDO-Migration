@@ -9,14 +9,14 @@ product comparison.
 ## The verdict
 
 About 85 percent of TRAP's operational outcomes ship in MDO P2 with policy
-configuration only. Another 10 percent needs custom Logic App + KQL work
-(roughly 320 senior-engineer hours). Two capabilities cannot be matched:
-remediating external forwarded copies, and a single-action remediation
-across multiple tenants. Both have honest workarounds documented here.
+configuration only. Another 10 percent needs custom Logic App and KQL
+work. Two capabilities cannot be matched: remediating external forwarded
+copies, and a single-action remediation across multiple tenants. Both
+have honest workarounds documented here.
 
 ## Read this first
 
-[**00-MVP-deployment-guide.md**](./00-MVP-deployment-guide.md) lists the
+[**00-MDO-out-of-the-box-deployment-guide.md**](./00-MDO-out-of-the-box-deployment-guide.md) lists the
 native MDO behaviours that cover most of TRAP's outcomes with no
 engineering. Start there. The rest of this blueprint covers the engineered
 gap-closers and the migration sequencing.
@@ -25,7 +25,7 @@ gap-closers and the migration sequencing.
 
 | # | Document | Purpose |
 |---|----------|---------|
-| 00 | **[MVP Deployment Guide](./00-MVP-deployment-guide.md)** | **What ships natively in MDO. The minimum-viable, day-1, all-config-no-engineering deployment. Read first.** |
+| 00 | **[MDO Out-of-the-box Deployment Guide](./00-MDO-out-of-the-box-deployment-guide.md)** | **What ships natively in MDO. The all-config, no-engineering baseline. Read first.** |
 | 01 | [Executive Summary](./01-executive-summary.md) | One-page summary, capability verdict, headline costs, headline gaps |
 | 02 | [Target-State Architecture](./02-architecture-overview.md) | High-level system, data, control, and remediation flow diagrams |
 | 03 | [TRAP → MDO Capability Matrix](./03-trap-capability-matrix.md) | Feature-by-feature parity table with native / partial / workaround / impossible verdicts |
@@ -39,10 +39,61 @@ gap-closers and the migration sequencing.
 | 11 | [Implementation Roadmap](./11-implementation-roadmap.md) | Phased migration plan (parallel run → cutover → decommission), with success criteria |
 | 12 | [Limitations, Gaps, and Workarounds](./12-limitations-and-gaps.md) | Honest catalogue of what cannot be matched, why, and the closest workaround |
 | 13 | [Licensing and Operational Considerations](./13-licensing-and-operations.md) | What SKUs we must hold, what tier each capability requires, ongoing operational cost |
+| 14 | [Open Questions](./14-open-questions.md) | Running list of unresolved decisions: on-prem and hybrid scope, the new Mail-Advanced.ReadWrite scope, our actual MDO licensing, and other items that can change project shape |
 
-Suggested reading order: 00 (MVP), 01 (executive summary), 02
-(architecture), 03 (capability matrix). The rest is reference material the
-roadmap calls for in sequence.
+Suggested reading order: 00 (OOTB deployment), 01 (executive summary), 02
+(architecture), 03 (capability matrix), 14 (open questions). The rest is
+reference material the roadmap calls for in sequence.
+
+---
+
+## Glossary
+
+The acronyms used across this blueprint, expanded once here so individual
+docs can stay readable. We do not re-expand the well-known industry terms
+(SIEM, SOAR, XDR, SHA, API, HTTP, REST, JSON, URL, UI, IP, SMTP, DNS,
+SOC, VIP, MFA, OAuth) on every use.
+
+| Acronym | Expansion |
+|---|---|
+| AIR | Automated Investigation and Response (a Microsoft Defender for Office 365 Plan 2 capability) |
+| ARM | Azure Resource Manager |
+| CA | Conditional Access |
+| CLEAR | Closed-Loop Email Analysis and Response (Proofpoint) |
+| DL | Distribution List |
+| DLP | Data Loss Prevention |
+| EOP | Exchange Online Protection |
+| EWS | Exchange Web Services (Microsoft, retiring in EXO October 2026) |
+| EXO | Exchange Online |
+| GDAP | Granular Delegated Admin Privileges |
+| IOC | Indicator of Compromise |
+| IRM | Information Rights Management |
+| KQL | Kusto Query Language |
+| LAW | Log Analytics Workspace |
+| MDI | Microsoft Defender for Identity |
+| MDO | Microsoft Defender for Office 365 |
+| MDTI | Microsoft Defender Threat Intelligence |
+| MI | Managed Identity |
+| MIP | Microsoft Information Protection |
+| MISP | Malware Information Sharing Platform |
+| MSSP | Managed Security Service Provider |
+| MTTR | Mean Time To Remediate |
+| NRT | Near Real Time (a Sentinel analytics rule type) |
+| OOTB | Out-of-the-box |
+| PTR | Proofpoint Threat Response |
+| RBAC | Role-Based Access Control |
+| STIX | Structured Threat Information Expression |
+| TABL | Tenant Allow/Block List (Microsoft) |
+| TAP | Targeted Attack Protection (Proofpoint) |
+| TAXII | Trusted Automated Exchange of Indicator Information |
+| TI | Threat Intelligence |
+| TRAP | Threat Response Auto-Pull (Proofpoint) |
+| UAL | Unified Audit Log (Microsoft) |
+| UAMI | User-Assigned Managed Identity |
+| UEBA | User and Entity Behaviour Analytics |
+| UPN | User Principal Name |
+| VAP | Very Attacked People (Proofpoint terminology, reused as a Sentinel watchlist) |
+| ZAP | Zero-hour Auto Purge (a Microsoft Defender for Office 365 capability) |
 
 ---
 

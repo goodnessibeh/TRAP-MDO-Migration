@@ -2,10 +2,10 @@
 
 > The "what fires what" reference for the Microsoft action engine that
 > replaces our TRAP auto-pull worker. Three distinct subsystems:
-> ZAP (autonomous purge), AIR (autonomous investigation plus recommended
-> action), Defender XDR (unified incident, take-action API, Action Center).
-
----
+> ZAP (Zero-hour Auto Purge, the autonomous post-delivery cleaner),
+> AIR (Automated Investigation and Response, the cluster investigator
+> with recommended actions), and Defender XDR (the unified incident
+> surface plus the email take-action API and Action Center).---
 
 ## 1. ZAP: Zero-hour Auto Purge
 

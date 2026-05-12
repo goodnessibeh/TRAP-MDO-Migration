@@ -32,17 +32,15 @@ tooling required.
 
 ## What requires custom engineering
 
-| Outcome | Engineered approach | Effort |
-|---|---|---|
-| Forward-following remediation (multi-hop) | KQL on `EmailEvents.NetworkMessageId` chain + recursive `Get-MessageTraceV2` to discover forwarded copies | ~80 hr |
-| Distribution-list expansion across nested DLs | `Get-DistributionGroupMember -Recursive` + Compliance Search by recipient set | ~40 hr |
-| Custom abuse mailbox ingestion (if rejecting built-in Defender path) | Logic App polling shared mailbox → parse `.eml` → call Submissions API → trigger remediation playbook | ~60 hr |
-| Reporter "thanks" + verdict-back notification (CLEAR-equivalent) | Logic App: pre-report banner is built-in; verdict-back requires playbook that posts to reporter on AIR investigation completion | ~40 hr |
-| VAP / Very Attacked People prioritisation | Sentinel watchlist (`VAP_Users`) + automation rule to escalate severity when reporter ∈ watchlist | ~24 hr |
-| Read-status visibility for reported messages across recipients | Graph `/users/{id}/messages/{id}?$select=isRead` per recipient enumerated by KQL | ~16 hr |
-| IOC-driven retroactive sweeps from external TI feed | Sentinel TI ingestion + scheduled hunting rule + remediation playbook | ~60 hr |
-
-Total bespoke engineering: **~320 hours** (≈ 2 senior engineers × 5 weeks).
+| Outcome | Engineered approach |
+|---|---|
+| Forward-following remediation (multi-hop) | KQL on `EmailEvents.NetworkMessageId` chain plus recursive `Get-MessageTraceV2` to discover forwarded copies |
+| Distribution-list expansion across nested DLs | `Get-DistributionGroupMember -Recursive` plus Compliance Search by recipient set |
+| Custom abuse mailbox ingestion (if rejecting built-in Defender path) | Logic App polling shared mailbox, parses `.eml`, calls Submissions API, triggers remediation playbook |
+| Reporter "thanks" plus verdict-back notification (CLEAR-equivalent) | Logic App: pre-report banner is built-in; verdict-back requires playbook that posts to reporter on AIR investigation completion |
+| VAP (Very Attacked People) prioritisation | Sentinel watchlist (`VAP_Users`) plus automation rule to escalate severity when reporter is in watchlist |
+| Read-status visibility for reported messages across recipients | Graph `/users/{id}/messages/{id}?$select=isRead` per recipient enumerated by KQL |
+| IOC-driven retroactive sweeps from external TI feed | Sentinel TI ingestion plus scheduled hunting rule plus remediation playbook |
 
 ## What is genuinely impossible (and the closest workaround)
 
@@ -71,15 +69,16 @@ Total bespoke engineering: **~320 hours** (≈ 2 senior engineers × 5 weeks).
 
 ## Operational shape after migration
 
-* SOC analyst time per phishing incident: **target 60 % reduction** vs. TRAP
-  (one console, Defender XDR, replaces TRAP UI plus email gateway UI;
-  AIR auto-remediates ~70 % of high-confidence cases without analyst).
-* MTTR (mean time to remediate) for user-reported phish:
-  TRAP baseline ≈ **3 to 8 minutes**; MDO + AIR target ≈ **2 to 5 minutes**
-  (dominant latency is AIR investigation, ~30 to 120 s, plus Compliance Search
-  fan-out, ~30 to 60 s for ≤500 recipients).
-* Approval workflow: Action Center one-click is faster than TRAP's incident
-  list approve flow.
+* SOC analyst load per phishing incident: meaningful reduction relative to
+  TRAP. One console (Defender XDR) replaces TRAP UI plus the email
+  gateway UI; AIR auto-remediates the majority of high-confidence cases
+  without an analyst.
+* Mean time to remediate (MTTR) for user-reported phish: dominated by AIR
+  investigation latency plus Compliance Search fan-out. Both are
+  Microsoft-side and bounded by the platform; we do not get to optimise
+  them further.
+* Approval workflow: Action Center one-click is faster than TRAP's
+  incident-list approve flow.
 * False-positive recovery: Defender quarantine release (admin or user
   self-service) replaces TRAP's "restore" capability.
 
@@ -103,23 +102,25 @@ Total bespoke engineering: **~320 hours** (≈ 2 senior engineers × 5 weeks).
 
 ## Recommended decision
 
-**Proceed with phased migration over 12 to 16 weeks.** Run TRAP and the Microsoft
-stack in parallel for ≥ 4 weeks, comparing remediation outcomes per incident,
-before decommissioning TRAP. Detailed phasing in
+**Proceed with the phased migration as fast as gating criteria allow.** Run
+TRAP and the Microsoft stack in parallel until we have a representative
+sample of incidents under both, then cut over and decommission TRAP. The
+phase gates (not a calendar) are in
 [`11-implementation-roadmap.md`](./11-implementation-roadmap.md).
 
 ## When NOT to migrate
 
-* We operate a heavily on-premises Exchange estate with no plan to move to
-  EXO. ZAP and AIR do not work on on-prem mailboxes; TRAP is purpose-built
-  for hybrid.
-* We depend on TAP for sandboxing and have no plan to replace it. (MDO Safe
-  Attachments is the equivalent; this blueprint assumes TAP→MDO sandboxing
-  migration is in scope.)
+* We operate a heavily on-premises Exchange estate with no plan to move
+  to Exchange Online. ZAP and AIR do not work on on-prem mailboxes; TRAP
+  is purpose-built for hybrid.
+* We depend on TAP for sandboxing and have no plan to replace it. (MDO
+  Safe Attachments is the equivalent; this blueprint assumes the TAP to
+  MDO sandboxing migration is in scope.)
 * We require true multi-tenant cross-organisation remediation in a single
-  console (e.g. an MSSP serving customers without per-tenant onboarding).
+  console (for example, an MSSP serving customers without per-tenant
+  onboarding).
 
-For everyone else, the engineering economics favour the Microsoft stack , 
-because the licences are largely already paid for in any Microsoft 365 E5
-estate, and the orchestration components (Sentinel, Logic Apps) are general-
-purpose investments rather than email-specific tools.
+For everyone else, the economics favour the Microsoft stack: the licences
+are largely already paid for in any Microsoft 365 E5 estate, and the
+orchestration components (Sentinel, Logic Apps) are general-purpose
+investments rather than email-specific tools.

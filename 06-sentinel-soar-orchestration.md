@@ -1,18 +1,20 @@
-# Microsoft Sentinel + Logic Apps: SOAR Orchestration Layer
+# Microsoft Sentinel and Logic Apps: SOAR Orchestration Layer
 
 > The control plane for the TRAP-replacement architecture. Sentinel is the
-> SIEM + analytics engine; Logic App playbooks are the action graphs;
-> automation rules wire them together. This document covers data
-> connectors, analytics rule design, automation rules, watchlists, TI,
-> and the identity/permissions model. Code-level KQL and playbook examples
-> live in [`09-kql-detection-library.md`](./09-kql-detection-library.md) and
+> SIEM and analytics engine; Logic App playbooks are the action graphs;
+> Sentinel automation rules wire them together. This document covers data
+> connectors, analytics rule design, automation rules, watchlists, threat
+> intelligence (TI), and the identity and permissions model. Code-level
+> KQL (Kusto Query Language) and playbook examples live in
+> [`09-kql-detection-library.md`](./09-kql-detection-library.md) and
 > [`10-logic-apps-playbook-library.md`](./10-logic-apps-playbook-library.md).
 
-> **Strategic note (2026)**: Microsoft Sentinel in the **Azure portal is
-> being retired on 31 March 2027**. New customers since July 2025 are
-> auto-onboarded to the **Microsoft Defender portal** (unified SecOps).
-> All design decisions in this document target the unified portal as the
-> end state. ([Sentinel onboarding guide](https://learn.microsoft.com/en-us/azure/sentinel/microsoft-sentinel-defender-portal).)
+> **Strategic note (2026)**: Microsoft Sentinel in the Azure portal is
+> being retired on 31 March 2027. New customers onboarded since July 2025
+> auto-route to the Microsoft Defender portal (the unified SecOps
+> experience). All design decisions in this document target the unified
+> portal as the end state.
+> ([Sentinel onboarding guide](https://learn.microsoft.com/en-us/azure/sentinel/microsoft-sentinel-defender-portal).)
 
 ---
 
@@ -22,9 +24,12 @@
 
 The single most load-bearing connector. Three jobs:
 
-1. **Incidents & alerts sync** (bi-directional). Surfaces in `SecurityIncident`
-   (`ProviderName == "Microsoft XDR"`) and `SecurityAlert`.
-2. **Entities (UEBA)**: on-prem AD via Defender for Identity into Sentinel UEBA.
+1. **Incidents and alerts sync** (bi-directional). Surfaces in
+   `SecurityIncident` (`ProviderName == "Microsoft XDR"`) and
+   `SecurityAlert`.
+2. **Entities for UEBA (User and Entity Behaviour Analytics)**: on-prem
+   Active Directory via Microsoft Defender for Identity (MDI) into
+   Sentinel UEBA.
 3. **Raw advanced-hunting events**: opt-in per table.
 
 Email-relevant tables (opt-in):
@@ -32,44 +37,52 @@ Email-relevant tables (opt-in):
 | Table | Purpose | Approx. volume per 10k mailbox tenant |
 |---|---|---|
 | `EmailEvents` | Delivery and blocking events for every message | 0.4 to 2 GB/day |
-| `EmailAttachmentInfo` | Per-attachment metadata + SHA256 | 0.1 to 0.5 GB/day |
+| `EmailAttachmentInfo` | Per-attachment metadata plus SHA256 | 0.1 to 0.5 GB/day |
 | `EmailUrlInfo` | URLs in body | 0.5 to 1.5 GB/day |
-| `EmailPostDeliveryEvents` | Post-delivery actions (ZAP, manual remediation) | 0.05 to 0.2 GB/day |
+| `EmailPostDeliveryEvents` | Post-delivery actions (ZAP — Zero-hour Auto Purge, manual remediation) | 0.05 to 0.2 GB/day |
 | `UrlClickEvents` | Safe Links click telemetry | 0.5 to 1.5 GB/day |
-| `AlertInfo`, `AlertEvidence` | Multi-product alert metadata + entities | 0.05 to 0.2 GB/day |
+| `AlertInfo`, `AlertEvidence` | Multi-product alert metadata plus entities | 0.05 to 0.2 GB/day |
 
 **Deduplication rule**: when we connect this connector, tick **"Turn off
 all Microsoft incident creation rules for these products"** to stop
 double-incidenting. In unified-portal mode, all `Microsoft Security`,
-`Fusion`, and `Anomaly` incident-creation rule types are auto-disabled , 
+`Fusion`, and `Anomaly` incident-creation rule types are auto-disabled;
 Defender XDR becomes the only incident creator.
 
 Source: [`connect-microsoft-365-defender`](https://learn.microsoft.com/en-us/azure/sentinel/connect-microsoft-365-defender).
 
 ### 1.2 Office 365 connector
 
-Streams Exchange/SharePoint/Teams audit activity into the `OfficeActivity`
-table. Use it for **mail-flow rule changes, mailbox permission changes,
-inbox-rule auto-forwarding**. events not in `EmailEvents`. Overlaps with
-`CloudAppEvents` (Defender for Cloud Apps) for SharePoint/Teams.
+Streams Exchange, SharePoint, and Teams audit activity into the
+`OfficeActivity` table. Use it for mail-flow rule changes, mailbox
+permission changes, and inbox-rule auto-forwarding (events not in
+`EmailEvents`). It overlaps with `CloudAppEvents` (sourced from
+Microsoft Defender for Cloud Apps) for SharePoint and Teams.
 
-### 1.3 Threat Intelligence connectors
+### 1.3 Threat Intelligence (TI) connectors
 
-Four ingestion paths ([`threat-intelligence-integration`](https://learn.microsoft.com/en-us/azure/sentinel/threat-intelligence-integration)):
+Four ingestion paths
+([`threat-intelligence-integration`](https://learn.microsoft.com/en-us/azure/sentinel/threat-intelligence-integration)):
 
-* **TAXII 2.x**: built-in connector, polls feeds.
-* **MDTI**: first-party feed, drives `Microsoft Threat Intelligence Analytics`.
-* **MISP via Logic Apps**: `MISP2Sentinel` add-on, calls
-  Threat Intelligence Upload Indicators API.
-* **Direct REST upload**: STIX 2.1 to the Threat Intelligence Upload API.
-  Requires Entra app + `Microsoft Sentinel Contributor` at workspace.
+* **TAXII 2.x** (Trusted Automated Exchange of Indicator Information):
+  built-in connector, polls feeds.
+* **MDTI** (Microsoft Defender Threat Intelligence): first-party feed,
+  drives the `Microsoft Threat Intelligence Analytics` matching rule.
+* **MISP** (Malware Information Sharing Platform) via Logic Apps: the
+  `MISP2Sentinel` add-on, which calls the Threat Intelligence Upload
+  Indicators API.
+* **Direct REST upload**: STIX 2.1 (Structured Threat Information
+  Expression) bundles to the Threat Intelligence Upload API. Requires
+  an Entra app plus the `Microsoft Sentinel Contributor` role at the
+  workspace.
 
 **Two TI tables in flight**:
 
-* `ThreatIntelligenceIndicator` (legacy schema). still populated for back-compat.
-* `ThreatIntelIndicators` + `ThreatIntelObjects` (new schema, May 2025+) , 
-  STIX 2.1-aligned, supports more object types. **Use for new rules.**
-  Back-compat queries can `union` both.
+* `ThreatIntelligenceIndicator` (legacy schema), still populated for
+  back-compat.
+* `ThreatIntelIndicators` plus `ThreatIntelObjects` (new schema, May
+  2025+), STIX 2.1-aligned, supports more object types. Use for new
+  rules. Back-compat queries can `union` both.
 
 ---
 
@@ -135,13 +148,14 @@ Source: [`automate-incident-handling-with-automation-rules`](https://learn.micro
 ### 3.1 Automation rules
 
 Three triggers: *When incident is created*, *When incident is updated*,
-*When alert is created* (Scheduled/NRT/Microsoft Security only. not
-Defender XDR alerts in unified portal).
+*When alert is created* (this last one fires only for Scheduled,
+NRT — Near Real Time — and Microsoft Security analytics rules; it does
+not fire for Defender XDR alerts in the unified portal).
 
 Native actions (no playbook needed):
 
 * Add an incident task (checklist).
-* Change status (with closing reason + comment).
+* Change status (with closing reason and comment).
 * Change severity.
 * Assign owner.
 * Add tag.
@@ -165,27 +179,32 @@ Both **Logic Apps Consumption** and **Standard** are supported. Use
 **Standard** for VNet integration, lower per-action cost, and stateful +
 stateless workflow co-hosting.
 
-### 3.3 Identity / connection model
+### 3.3 Identity and connection model
 
-* **Managed identity** (system- or user-assigned) is the recommended pattern.
-  Grant the playbook MI the **Microsoft Sentinel Responder** role on the workspace.
-* The platform **Microsoft Sentinel Automation Contributor** role must be
-  granted to the **Azure Security Insights** service principal on the
-  resource group containing playbooks, so automation rules can invoke them.
-* **OAuth API connections (per-user)** are still required for the Office 365
-  Outlook connector. **service principals and managed identity are not
-  supported**. Plan a SOC service-mailbox account with conditional-access
-  carve-out and MFA exemption.
+* **Managed identity** (MI; system-assigned or user-assigned, the latter
+  abbreviated UAMI) is the recommended pattern. Grant the playbook's MI
+  the **Microsoft Sentinel Responder** role on the workspace.
+* The platform **Microsoft Sentinel Automation Contributor** role must
+  be granted to the **Azure Security Insights** service principal on
+  the resource group containing playbooks, so automation rules can
+  invoke them.
+* **OAuth API connections (per-user)** are still required for the
+  Office 365 Outlook connector. Service principals and managed identity
+  are not supported on that connector. Plan a SOC service-mailbox
+  account with a conditional-access carve-out and MFA (Multi-Factor
+  Authentication) exemption.
 
-### 3.4 Approvals / human-in-the-loop
+### 3.4 Approvals and human-in-the-loop
 
-* **Outlook "Send approval email"**: actionable card; per-user OAuth required.
-* **Teams "Post adaptive card and wait for a response"**: preferred for SOC
-  channels (no per-user mailbox needed). Adaptive cards block the run until
-  response or timeout.
-* **Defender for Office 365 native two-step approval**: `Add to remediation` →
-  reviewer approves in Action Center. An alternative when we don't need
-  custom branching.
+* **Outlook "Send approval email"**: actionable card; per-user OAuth
+  required.
+* **Teams "Post adaptive card and wait for a response"**: preferred for
+  SOC channels (no per-user mailbox needed). Adaptive cards block the
+  run until the user responds or the timeout fires.
+* **Defender for Office 365 native two-step approval**: use the
+  `Add to remediation` flow, then have a reviewer approve in the Action
+  Center. An alternative when we do not need custom branching in the
+  approval graph.
 
 ---
 
@@ -196,12 +215,15 @@ Source: [`watchlists`](https://learn.microsoft.com/en-us/azure/sentinel/watchlis
 Recommended phishing watchlists:
 
 * `VIP_Users`. executive + sensitive-role accounts.
-* `VAP_Users`. Very Attacked People (analytic-derived from MDTI / Defender XDR).
-* `Sender_Allowlist`. pen-test senders, partner mail systems.
-* `Sender_Blocklist`. known-bad senders (TI feed).
-* `Trusted_Partner_Domains`. auto-allow upstream from TABL.
-* `High_Value_Mailboxes`. finance, legal, M&A.
-* `PhishSim_Vendor_IPs`. Cofense, KnowBe4, etc., for exclusion.
+* `VAP_Users`: VAP (Very Attacked People), analytic-derived from MDTI
+  and Defender XDR.
+* `Sender_Allowlist`: pen-test senders, partner mail systems.
+* `Sender_Blocklist`: known-bad senders, sourced from the TI feed.
+* `Trusted_Partner_Domains`: auto-allow upstream from TABL (Tenant
+  Allow/Block List).
+* `High_Value_Mailboxes`: finance, legal, M&A.
+* `PhishSim_Vendor_IPs`: addresses used by phishing-simulation vendors
+  (Cofense, KnowBe4, and similar), held as an exclusion list.
 
 **Hard limits**:
 
@@ -306,16 +328,19 @@ Source: [`logic-apps-limits-and-config`](https://learn.microsoft.com/en-us/azure
 
 ---
 
-## 8. Multi-tenant via Lighthouse
+## 8. Multi-tenant via Microsoft 365 Lighthouse
 
-Sentinel actions stop at the workspace's tenant boundary. Defender XDR Email
-take-action only purges mailboxes in the **same tenant** as the connector.
-For multi-tenant orgs (M&A, MSSP):
+Sentinel actions stop at the workspace's tenant boundary. Defender XDR
+Email take-action only purges mailboxes in the same tenant as the
+connector. For multi-tenant orgs (mergers and acquisitions, or MSSP
+— Managed Security Service Provider — scenarios):
 
-* One playbook per tenant, each with its own MI and API permission grants.
-* **Azure Lighthouse** delegation must include the **Azure Security Insights**
-  app + **Microsoft Sentinel Automation Contributor** on the playbook RG.
-* Cross-tenant central Sentinel via cross-workspace queries; alerts/incidents
+* One playbook per tenant, each with its own managed identity and
+  Microsoft Graph application permission grants.
+* **Azure Lighthouse** delegation must include the **Azure Security
+  Insights** app plus the **Microsoft Sentinel Automation Contributor**
+  role on the playbook resource group.
+* Centralised Sentinel via cross-workspace queries; alerts and incidents
   do not flow back automatically.
 
 Detailed in [`12-limitations-and-gaps.md`](./12-limitations-and-gaps.md) §3.
@@ -324,18 +349,19 @@ Detailed in [`12-limitations-and-gaps.md`](./12-limitations-and-gaps.md) §3.
 
 ## 9. Sentinel-specific design rules
 
-1. **Use the Microsoft Sentinel incident trigger, not alert trigger**, for
-   all production playbooks. alert triggers are not available for Defender
-   XDR alerts in unified portal mode.
-2. **Map MailMessage and Mailbox entities** in every email analytic rule , 
-   playbooks key off these to drive the take-action flow without re-deriving
-   IDs.
-3. **Coalesce updates**: Defender XDR coalesces multiple incident updates
-   within a 5 to 10 min window into one event sent to Sentinel. automation
-   rules see only the most recent state. Design idempotently.
-4. **Re-audit `Account.Name` comparisons before July 2026**: the post-change
-   value is the prefix only; `Account.Name + Account.UPNSuffix` is the new
-   full UPN.
+1. **Use the Microsoft Sentinel incident trigger, not the alert
+   trigger**, for all production playbooks. The alert trigger is not
+   available for Defender XDR alerts in unified portal mode.
+2. **Map `MailMessage` and `Mailbox` entities** in every email analytics
+   rule. Playbooks key off these to drive the take-action flow without
+   re-deriving IDs.
+3. **Coalesce updates**: Defender XDR coalesces multiple incident
+   updates within a 5-to-10-minute window into one event sent to
+   Sentinel. Automation rules see only the most recent state. Design
+   idempotently.
+4. **Re-audit `Account.Name` comparisons before July 2026**: the
+   post-change value is the UPN (User Principal Name) prefix only;
+   `Account.Name + Account.UPNSuffix` is the new full UPN.
 5. **Author new detections as Defender XDR Custom Detections** in
    unified-portal tenants; they natively cross-correlate and reduce
    sync-lag.
@@ -345,12 +371,12 @@ Detailed in [`12-limitations-and-gaps.md`](./12-limitations-and-gaps.md) §3.
 ## 10. Reference deployment shape
 
 ```text
-Sentinel workspace (LAW)
+Sentinel workspace (LAW: Log Analytics Workspace)
 ├─ Connectors:
 │   ├─ Microsoft Defender XDR (raw + incidents + UEBA)
 │   ├─ Office 365 (audit logs)
-│   ├─ TAXII (3rd-party TI)
-│   └─ MDTI (Microsoft TI)
+│   ├─ TAXII (third-party TI)
+│   └─ MDTI (Microsoft Defender Threat Intelligence)
 ├─ Watchlists:
 │   ├─ VIP_Users / VAP_Users / Sender_Allowlist / Sender_Blocklist
 │   ├─ Trusted_Partner_Domains / High_Value_Mailboxes / PhishSim_Vendor_IPs

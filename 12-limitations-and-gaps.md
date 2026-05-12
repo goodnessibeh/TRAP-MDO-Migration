@@ -6,7 +6,7 @@ up-front rather than discover it during an incident.
 
 Where a gap has been called out elsewhere in this blueprint, the entry
 here points at the canonical detail and adds the operational nuance we
-have learned in pilot deployments.
+have learned in staging exercises.
 
 ---
 
@@ -135,7 +135,7 @@ message 30 days after delivery.
 **What MDO does:** ZAP eligibility is hardcoded at **48 hours**: Beyond
 that, ZAP does not fire. AIR can still operate (its lookback is the
 `EmailEvents` retention window, defaulting to 30 days in Advanced
-Hunting), and the SOC can still manually remediate via Defender XDR
+Hunting), and we can still manually remediate via Defender XDR
 Take Action or via Compliance Search-Action.
 
 **Why hardcoded:** Microsoft's design assumption is that beyond 48 hours,
@@ -195,7 +195,7 @@ back-fitted.
 
 * For sending mail from a playbook (the "thanks for reporting" case), use
   Graph `POST /users/{soc-mailbox}/sendMail` via HTTP+MI, not the named
-  connector. Permission: `Mail.Send` on the SOC mailbox, scoped via
+  connector. Permission: `Mail.Send` on our SOC mailbox, scoped via
   Application Access Policy or RBAC for Applications.
 * For polling a shared abuse mailbox, the only supported pattern is the
   named connector with per-user OAuth. Use a dedicated service account,
@@ -216,7 +216,7 @@ fired, the investigation closes with no actions and the notification does
 not go. The user is left without acknowledgement.
 
 **Closest workaround:** the Reporter Thanks Bridge Logic App (P3,
-documented in the MVP guide). One playbook, fewer than 5 actions. Closes
+documented in the OOTB deployment guide). One playbook, fewer than 5 actions. Closes
 the gap completely.
 
 ---
@@ -312,7 +312,7 @@ fallback.
 * Sentinel scheduled hunting query (Q1 + Q3) supplements AIR. If AIR has
   not produced a recommended action within 5 minutes, the Sentinel
   playbook fires the same Take Action API call directly. We saw this
-  pattern in two of three pilot deployments; it is worth building.
+  pattern in two of three staging exercises; it is worth building.
 
 ---
 
