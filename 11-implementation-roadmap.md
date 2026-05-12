@@ -7,15 +7,15 @@ weeks, then engineering layered on top. The total calendar window is 12 to
 estates take longer; the gating constraint there is identity model
 migration rather than configuration work.
 
-The phases are deliberately ordered so that you have a working safety net
-at every step. At no point are you flying without one of either TRAP or the
+The phases are deliberately ordered so that we have a working safety net
+at every step. At no point are we flying without one of either TRAP or the
 MDO MVP.
 
 ---
 
 ## Phase 0. Pre-flight (Week 0, 1 to 2 weeks)
 
-**Goal:** know what you have, get the licences right, get the people in a
+**Goal:** know what we have, get the licences right, get the people in a
 room.
 
 What to do:
@@ -25,21 +25,21 @@ What to do:
   contents, the SOAR integrations (XSOAR / Splunk / QRadar), the SIEM
   forwarding configuration, the audit-trail export schedule, and the
   service-account / app-registration configuration. Save this somewhere
-  the migration team can reference; you will need it when wiring the
+  the migration team can reference; we will need it when wiring the
   parallel run in Phase 2.
-* Audit MDO licensing. Run `Get-MgUserLicenseDetail` across your user base
-  and confirm MDO P2 (or M365 E5) is assigned to every mailbox you want
+* Audit MDO licensing. Run `Get-MgUserLicenseDetail` across our user base
+  and confirm MDO P2 (or M365 E5) is assigned to every mailbox we want
   protected. Note that MDO P1 alone is not enough; AIR, Campaigns,
   Threat Explorer remediation actions all require P2.
 * Audit hybrid posture. `Get-Mailbox -ResultSize Unlimited |
   Group-Object RecipientTypeDetails`. Any mailbox that is not in EXO is
-  out of scope for ZAP and AIR; you will need a separate plan for it
+  out of scope for ZAP and AIR; we will need a separate plan for it
   (see [`12-limitations-and-gaps.md`](./12-limitations-and-gaps.md) §2).
 * Decide the migration steward. One named person owns the migration
   programme. Trying to migrate by committee fails reliably.
-* Pull the historic incident data out of TRAP if you need it for compliance.
+* Pull the historic incident data out of TRAP if we need it for compliance.
   PTR's `/api/incidents` is the canonical export; iterate over the 30-day
-  windows that the API allows. Stash the export in blob storage; you do
+  windows that the API allows. Stash the export in blob storage; we do
   not need to re-import it into Sentinel unless an auditor asks. Most do
   not.
 
@@ -58,7 +58,7 @@ What to do:
 unchanged.
 
 This is the [`00-MVP-deployment-guide.md`](./00-MVP-deployment-guide.md)
-work in full. Summary of what changes in your tenant:
+work in full. Summary of what changes in our tenant:
 
 * Strict preset (or tuned equivalent) applied to anti-phish, anti-spam,
   anti-malware, Safe Links, Safe Attachments.
@@ -70,7 +70,7 @@ work in full. Summary of what changes in your tenant:
 * Sentinel workspace provisioned and connected to Defender XDR (incidents
   + alerts + the small EmailEvents/EmailPostDeliveryEvents/AlertInfo/
   AlertEvidence table set).
-* Search and Purge role assigned to your Data Investigator role group.
+* Search and Purge role assigned to our Data Investigator role group.
 * Reporter Thanks Bridge Logic App deployed (one playbook, fewer than 5
   actions).
 
@@ -78,12 +78,12 @@ What does **not** change in this phase:
 
 * TRAP keeps running. Reporters who hit the legacy PhishAlarm button still
   flow into TRAP normally.
-* Your existing SOAR integration into TRAP keeps working.
+* Our existing SOAR integration into TRAP keeps working.
 * No engineered enhancements (forward-tracking, DL expansion, TI sweep,
   VAP scoring) yet.
 
 **Validation tests** are T1 to T7 in the MVP guide. All seven must pass
-before you exit Phase 1. If T2 (user-reported phish to AIR) intermittently
+before we exit Phase 1. If T2 (user-reported phish to AIR) intermittently
 fails to fire, the most likely cause is the `Auto-Resolve - Email reported
 by user as malware or phish` alert tuning rule still being enabled.
 
@@ -92,7 +92,7 @@ by user as malware or phish` alert tuning rule still being enabled.
 * T1 to T7 functional tests pass.
 * MDO MVP and TRAP both operating; no protection gap during the dual-run
   period.
-* Defender XDR Action Center showing typical incident volume for your
+* Defender XDR Action Center showing typical incident volume for our
   environment.
 
 ---
@@ -124,8 +124,8 @@ What to do:
   - Reporters who did not get a thank-you because AIR closed before the
     auto-feedback rule fired (Reporter Thanks Bridge handles this; confirm
     it is)
-  - VIP-touching incidents where you wanted higher severity automatically
-* Decide which Phase 3 enhancements you actually need based on the
+  - VIP-touching incidents where we wanted higher severity automatically
+* Decide which Phase 3 enhancements we actually need based on the
   observed gaps, not on the comprehensive list.
 
 What does not change yet:
@@ -149,7 +149,7 @@ What does not change yet:
 hypothetical needs.
 
 The work breaks into independent workstreams; the order below is the one
-we found most efficient. You can run them in parallel if you have the
+we found most efficient. We can run them in parallel if we have the
 engineering capacity.
 
 | Workstream | Effort (sr eng hr) | Document |
@@ -170,7 +170,7 @@ engineering capacity.
   trap.
 * Deploy each workstream behind a feature toggle (we used a Sentinel
   watchlist `EnabledPlaybooks` keyed on playbook name with an `enabled:
-  true|false` column). Lets you roll back without redeploying.
+  true|false` column). Lets us roll back without redeploying.
 * Each playbook ships with a runbook page in the SOC wiki. The page
   documents what the playbook does, what entities it expects, what
   permissions it needs, and what the rollback looks like.
@@ -201,7 +201,7 @@ What to do:
 * Communicate to all users at least one week in advance. The user-visible
   change is small (the Outlook Report button looks slightly different) but
   some users will notice and need a heads-up.
-* Disable the PhishAlarm add-in deployment from your tenant management.
+* Disable the PhishAlarm add-in deployment from our tenant management.
   New mail should now use the built-in Report button only.
 * Disable the TRAP abuse-mailbox poller. Do not delete the abuse mailbox;
   keep it around for the parallel-run rollback option.
@@ -211,12 +211,12 @@ What to do:
   Sentinel watchlists.
 * Update any external SOAR integrations (XSOAR, Splunk SOAR) to point at
   Sentinel and Defender XDR APIs instead of TRAP REST API.
-* Confirm with your monitoring team that incident volume and MTTR
+* Confirm with our monitoring team that incident volume and MTTR
   dashboards are now sourced from Sentinel.
 
 What does NOT change yet:
 
-* TRAP itself remains installed and licensed. You can re-enable the
+* TRAP itself remains installed and licensed. We can re-enable the
   abuse-mailbox poller within an hour if Phase 4 turns up an unexpected
   problem.
 
@@ -277,7 +277,7 @@ What does NOT need cleanup:
 | **Total** | **11 to 16 weeks** | **~440 to 580 hr** | **~180 hr** |
 
 Assumes one tenant, one estate. Multi-tenant adds roughly 80 engineering
-hours per additional tenant. If you have a hybrid Exchange estate that you
+hours per additional tenant. If we have a hybrid Exchange estate that we
 also need to handle, add another 80 to 160 hours and adjust expectations
 accordingly (see [`12-limitations-and-gaps.md`](./12-limitations-and-gaps.md) §2).
 
@@ -290,8 +290,8 @@ A few things that have killed migrations we have seen:
 * **License gap.** A pocket of mailboxes assigned MDO P1 instead of P2.
   Catch in Phase 0; the alternative is discovering it in Phase 2 when AIR
   silently fails to investigate those users' reports.
-* **ApplicationImpersonation residue.** If you migrated TRAP to RBAC for
-  Applications during 2024, you may have lingering scope assignments that
+* **ApplicationImpersonation residue.** If we migrated TRAP to RBAC for
+  Applications during 2024, we may have lingering scope assignments that
   give a defunct app more access than expected. Audit and clean up before
   Phase 5.
 * **Conditional access for the Outlook approval connection.** The OAuth

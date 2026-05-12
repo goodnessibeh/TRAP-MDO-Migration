@@ -1,22 +1,21 @@
 # MVP Deployment Guide: Native MDO First, Engineering Later
 
-> **Read this first if you are starting a TRAP-replacement project.** Most
-> of TRAP's headline outcomes are already in Microsoft Defender for Office
-> 365 P2 with **policy configuration only, no engineering**. This document
-> tells you what to deploy in week 1 to get the bulk of the value, what to
-> validate, and what to defer to Phase 2/3 for the full TRAP-equivalent
-> experience.
+> Our starting point for the TRAP retirement. Most of what TRAP does for
+> us is already in MDO P2 with policy configuration alone, no engineering.
+> This doc captures what we deploy in week 1 to get the bulk of the value,
+> what we validate, and what we defer to Phase 2/3 for full TRAP-equivalent
+> behaviour.
 >
-> Every "Native" item is a config change in the Defender portal or a
-> single PowerShell line. Every "Engineered" item requires building a
-> Logic App or Function App and is deferred to a later phase.
+> Every "Native" item below is a config change in the Defender portal or a
+> single PowerShell line. Every "Engineered" item is a Logic App or
+> Function App we build later.
 
 ---
 
-## TL;DR: what MDO already gives you, native, no engineering
+## TL;DR: what MDO already gives us, native, no engineering
 
-If you have **MDO P2** (or M365 E5), the following TRAP-equivalent
-behaviours are **already in your tenant** and just need to be turned on
+If we have **MDO P2** (or M365 E5), the following TRAP-equivalent
+behaviours are **already in our tenant** and just need to be turned on
 and tuned:
 
 | TRAP outcome | Native MDO equivalent | Action required |
@@ -49,7 +48,7 @@ this document.
 
 ## MVP scope (what "minimum viable" actually means here)
 
-The MVP is the **smallest configuration change set** that lets you turn off
+The MVP is the **smallest configuration change set** that lets us turn off
 TRAP without losing protection. It is **all-native MDO** plus one Sentinel
 workspace + one Logic App for SIEM ingest. It does **not** cover:
 
@@ -60,7 +59,7 @@ workspace + one Logic App for SIEM ingest. It does **not** cover:
 * VAP-driven incident severity boosting.
 * Two-stage approvals with VIP-aware routing.
 
-These are Phase 2/3 enhancements. If your environment has any of those as
+These are Phase 2/3 enhancements. If our environment has any of those as
 **hard requirements** (regulator/audit/contractual), see the gating
 checklist in §5.
 
@@ -132,10 +131,10 @@ Settings to apply for the MVP:
 | Monitor reported messages in Outlook | **ON** |
 | Outlook report button configuration | **Use the built-in Report button in Outlook** |
 | Send reported items to | **Microsoft and my reporting mailbox** |
-| Reporting mailbox | `reportedmessages@<your-tenant>.com` (create as EXO mailbox first) |
+| Reporting mailbox | `reportedmessages@<our-tenant>.com` (create as EXO mailbox first) |
 | Ask the user to confirm before reporting | **ON** (Phish + Junk + Not junk) |
 | Show a success message after the message is reported | **ON** |
-| Customize messages | Tenant-branded text, your logo |
+| Customize messages | Tenant-branded text, our logo |
 | **Automatically email users the results of the investigation** | **ON** for Phishing/malware AND No threats found |
 
 PowerShell equivalent:
@@ -217,7 +216,7 @@ The MVP needs Sentinel **only** for two reasons:
 
 ### 3.1 Workspace
 
-* Provision a Log Analytics workspace in the same region as your tenant.
+* Provision a Log Analytics workspace in the same region as our tenant.
 * Onboard Microsoft Sentinel.
 * Onboard to the **unified Defender portal** (recommended. Microsoft is
   retiring the Azure-portal Sentinel UI on 31 Mar 2027).
@@ -228,14 +227,14 @@ The MVP needs Sentinel **only** for two reasons:
 |---|---|
 | **Microsoft Defender XDR** | Incidents + alerts + raw email tables |
 | **Office 365** | OfficeActivity audit (mailbox rules, mail-flow rule changes) |
-| (optional) **MDTI** | Microsoft Defender Threat Intelligence. only if you have the SKU |
+| (optional) **MDTI** | Microsoft Defender Threat Intelligence. only if we have the SKU |
 
 For the **Defender XDR connector**, the MVP enables:
 
 * Incidents and alerts: **ON**
 * Tables: `EmailEvents`, `EmailPostDeliveryEvents`, `AlertInfo`, `AlertEvidence`
 * **Defer**: `EmailUrlInfo`, `EmailAttachmentInfo`, `UrlClickEvents` (high
-  cardinality; turn on in Phase 2 when you need URL/attachment hunting).
+  cardinality; turn on in Phase 2 when we need URL/attachment hunting).
 
 When connecting, tick **"Turn off all Microsoft incident creation rules for
 these products"** to prevent double-incidenting.
@@ -264,8 +263,8 @@ playbook's thank-you (if AIR found nothing or was suppressed). The AIR
 feedback then provides the verdict-back later if/when the investigation
 closes.
 
-> If your tenant is small and you accept the edge case where reporters
-> sometimes don't receive a verdict, you can skip even this Logic App and
+> If our tenant is small and we accept the edge case where reporters
+> sometimes don't receive a verdict, we can skip even this Logic App and
 > have a **fully native MVP**.
 
 ---
@@ -293,39 +292,39 @@ Run these tests end-to-end before declaring MVP done:
 * MTTR for user-reported phish: 2 to 10 min (AIR latency + remediation fan-out).
 * False-positive recovery: Defender quarantine self-service release.
 
-If T1 to T7 pass, **you can run TRAP and the MVP in parallel for 2 weeks,
+If T1 to T7 pass, **we can run TRAP and the MVP in parallel for 2 weeks,
 compare incident outcomes, and decommission TRAP if the MVP equals or
-exceeds TRAP for your incident corpus.**
+exceeds TRAP for our incident corpus.**
 
 ---
 
 ## 5. What is NOT in the MVP. Phase 2/3 enhancements
 
-If any of the following are **hard requirements** for your SOC, plan them as
+If any of the following are **hard requirements** for our SOC, plan them as
 Phase 2 / 3 work *before* TRAP decommission. Each is documented in detail
 elsewhere in this blueprint.
 
 ### Phase 2: engineered enhancements (≈ 8 weeks effort, 2 senior engineers)
 
-| Capability | Why TRAP did this and you might still need it | Effort | Document |
+| Capability | Why TRAP did this and we might still need it | Effort | Document |
 |---|---|---|---|
-| **VAP / VIP-aware severity boosting** | TRAP profiled Very Attacked People; you may want auto-escalation when a VIP reports phish | 24 h | [`06-sentinel-soar-orchestration.md`](./06-sentinel-soar-orchestration.md) §4 |
+| **VAP / VIP-aware severity boosting** | TRAP profiled Very Attacked People; we may want auto-escalation when a VIP reports phish | 24 h | [`06-sentinel-soar-orchestration.md`](./06-sentinel-soar-orchestration.md) §4 |
 | **TI-driven retroactive sweep beyond ZAP's 48 h window** | TRAP could remediate any-age message; ZAP is hardcoded to 48 h | 60 h | [`02-architecture-overview.md`](./02-architecture-overview.md) Workflow C, [`09-kql-detection-library.md`](./09-kql-detection-library.md) Q5 |
 | **Forward-following internal copies** | TRAP walked internal forwards that ZAP misses | 80 h | [`02-architecture-overview.md`](./02-architecture-overview.md) Workflow D |
 | **Distribution-list enumeration for fan-out** | TRAP did `Get-DistributionGroupMember -Recursive` for explicit fan-out | 40 h | [`02-architecture-overview.md`](./02-architecture-overview.md) Workflow E |
 | **Two-stage approval for VIP-mailbox actions** | TRAP supported tiered approvals; Defender Action Center is single-tier | 16 h | [`10-logic-apps-playbook-library.md`](./10-logic-apps-playbook-library.md) P5 |
 | **Read-status visibility per recipient** | TRAP showed pre-pull `IsRead` per recipient | 16 h | [`03-trap-capability-matrix.md`](./03-trap-capability-matrix.md) §G |
-| **Custom abuse-mailbox ingestion (when not using built-in Report)** | If you have legacy `abuse@` mail flowing from non-Outlook clients or hybrid mailboxes | 60 h | [`08-abuse-mailbox-and-user-reporting.md`](./08-abuse-mailbox-and-user-reporting.md) |
+| **Custom abuse-mailbox ingestion (when not using built-in Report)** | If we have legacy `abuse@` mail flowing from non-Outlook clients or hybrid mailboxes | 60 h | [`08-abuse-mailbox-and-user-reporting.md`](./08-abuse-mailbox-and-user-reporting.md) |
 | **Cross-vendor enrichment in incident playbook** (VirusTotal, MDTI, AbuseIPDB) | TRAP/PTR had built-in enrichment connectors | 16 h | [`10-logic-apps-playbook-library.md`](./10-logic-apps-playbook-library.md) P1 |
 
 ### Phase 3: advanced / situational (deploy only if needed)
 
-| Capability | When you need it | Effort | Document |
+| Capability | When we need it | Effort | Document |
 |---|---|---|---|
-| **Cross-tenant remediation** (M&A, MSSP) | You operate >1 tenant and want unified incident view | 80 h per tenant | [`12-limitations-and-gaps.md`](./12-limitations-and-gaps.md) §3 |
-| **On-prem hybrid mailbox remediation** | You still have on-prem mailboxes that ZAP/AIR cannot touch | 80 to 160 h custom EWS agent (deprecating) | [`12-limitations-and-gaps.md`](./12-limitations-and-gaps.md) §2 |
-| **Mass migration of historical TRAP incident data** | You need TRAP incident history for compliance | 40 h ETL | [`11-implementation-roadmap.md`](./11-implementation-roadmap.md) Phase 0 |
-| **External forward egress alerting** | You worry about already-forwarded phishes | 8 h alert rule | [`09-kql-detection-library.md`](./09-kql-detection-library.md) Q7 |
+| **Cross-tenant remediation** (M&A, MSSP) | We operate >1 tenant and want unified incident view | 80 h per tenant | [`12-limitations-and-gaps.md`](./12-limitations-and-gaps.md) §3 |
+| **On-prem hybrid mailbox remediation** | We still have on-prem mailboxes that ZAP/AIR cannot touch | 80 to 160 h custom EWS agent (deprecating) | [`12-limitations-and-gaps.md`](./12-limitations-and-gaps.md) §2 |
+| **Mass migration of historical TRAP incident data** | We need TRAP incident history for compliance | 40 h ETL | [`11-implementation-roadmap.md`](./11-implementation-roadmap.md) Phase 0 |
+| **External forward egress alerting** | We worry about already-forwarded phishes | 8 h alert rule | [`09-kql-detection-library.md`](./09-kql-detection-library.md) Q7 |
 
 ---
 
@@ -351,26 +350,30 @@ Before declaring MVP done and beginning TRAP decommission, confirm:
 - [ ] SOC playbook updated to use new tools; analysts trained.
 - [ ] TRAP and MVP run in parallel for 2 weeks; outcomes compared.
 
-If all boxes are ticked, **you can decommission TRAP**: The Phase 2/3 work
+If all boxes are ticked, **we can decommission TRAP**: The Phase 2/3 work
 is then a continuous improvement programme on top of a working baseline.
 
 ---
 
-## 7. Anti-pattern: do NOT skip the MVP
+## 7. Anti-pattern: do not skip the MVP
 
-It's tempting to design the full Phase 1+2+3 architecture upfront and roll
-it out as one project. **Don't.** The native MDO surface is mature and
-covers the bulk of TRAP outcomes; engineering effort spent reproducing
-things MDO already does is engineering time wasted.
+The temptation here is to design the full Phase 1+2+3 architecture upfront
+and ship it as one project. We should not. The native MDO surface is
+mature; engineering effort we spend reproducing what MDO already does is
+engineering time wasted.
 
-Two anti-patterns to avoid:
+Two specific traps we have to avoid:
 
 1. **Building a custom abuse-mailbox Logic App when the built-in custom
-   reporting mailbox is sufficient.** The native path is one config screen.
-2. **Building a custom AIR-equivalent investigation engine.** AIR clusters
-   automatically; building your own correlation in KQL is reinventing the
-   wheel.
+   reporting mailbox is sufficient.** The native path is one config
+   screen. If we build the Logic App first, we own polling, retry,
+   parsing, dedup, and submission lifecycle for no reason.
+2. **Building a custom AIR-equivalent investigation engine.** AIR already
+   clusters by sender, subject, URL, and attachment. If we re-implement
+   that in KQL ourselves, we get the same answers more slowly and we own
+   tuning indefinitely.
 
-Run the MVP for 2 to 4 weeks before deciding which Phase 2 enhancements you
-actually need. In our experience, ~70 % of TRAP customers find the MVP
-sufficient and never need most of Phase 2.
+Plan: run the MVP for 2 to 4 weeks. Then look at what TRAP actually did for
+us during that window that the MVP did not, and let those gaps drive Phase
+2 scope. In most pilots we have seen, the MVP covers ~70 % of historical
+TRAP work without any Phase 2 build.

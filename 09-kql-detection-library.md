@@ -6,7 +6,7 @@ intent, the table dependencies, and the operational caveats that bit us
 in testing.
 
 These are written for the **Defender XDR Advanced Hunting unified schema**.
-Anything that says `let X = _GetWatchlist('...')` assumes you have already
+Anything that says `let X = _GetWatchlist('...')` assumes we have already
 created the named watchlist in Sentinel; queries against
 `ThreatIntelIndicators` assume the new TI schema (May 2025+) is live in
 the workspace.
@@ -18,7 +18,7 @@ A few conventions used throughout:
   `InternetMessageId` when correlating inside the tenant.
 * `InternetMessageId` is RFC 5322 `Message-ID:`. Use it when a message
   arrived from outside or when a third party (a TI feed, a user-supplied
-  forensic artefact) gives you the ID.
+  forensic artefact) gives us the ID.
 * All time pivots use `Timestamp` for `EmailEvents` family and
   `TimeGenerated` for everything else. The two are usually within seconds
   of each other but not always.
@@ -56,7 +56,7 @@ EmailEvents
 
 If the result returns zero rows, the message is older than the
 `EmailEvents` retention window (default 30 days in Advanced Hunting). Fall
-back to `Get-MessageTraceV2` in EXO PowerShell, which gives you a 90-day
+back to `Get-MessageTraceV2` in EXO PowerShell, which gives us a 90-day
 ceiling at the cost of much weaker filtering.
 
 ---
@@ -65,7 +65,7 @@ ceiling at the cost of much weaker filtering.
 
 **Use it for:** answering "did anyone click the bad link before we pulled
 the message?". Sister query to Q1; both should run as part of the
-remediation playbook so you can flag clicked-on recipients for
+remediation playbook so we can flag clicked-on recipients for
 endpoint and identity follow-up.
 
 ```kusto
@@ -125,12 +125,12 @@ Tuning notes:
 
 * The `ClusterKey` collapses sender domain, subject hash, and URL host into
   a single string. That is intentional: any rotated component still produces
-  a unique key. If you want broader grouping (e.g. ignore subject hash
+  a unique key. If we want broader grouping (e.g. ignore subject hash
   rotation), drop `SubjectHash` from the strcat.
 * `make_set(..., 100)` caps the recipient list at 100 to keep entity
-  payloads under the 64 KB Sentinel entity field cap. Adjust if you want
+  payloads under the 64 KB Sentinel entity field cap. Adjust if we want
   fewer / more.
-* `MessageCount >= 3` is a reasonable noise floor. Drop to 2 if you are
+* `MessageCount >= 3` is a reasonable noise floor. Drop to 2 if we are
   hunting low-volume targeted campaigns; raise to 10+ for bulk filtering.
 
 ---
@@ -167,11 +167,11 @@ Honest caveats:
   the prefix or strip it entirely. The fallback is a body-fingerprint match
   but `EmailEvents` does not expose body content.
 * `EmailDirection == "Intraorg"` excludes external forwards. We cannot
-  remediate external recipients regardless, but if you want them in the
+  remediate external recipients regardless, but if we want them in the
   result for auditing, drop this filter.
 * The `In-Reply-To` / `References` headers would be the gold-standard
   correlation, but Microsoft does not expose those columns in `EmailEvents`.
-  For that level you need `Get-MessageTraceV2` or a Graph
+  For that level we need `Get-MessageTraceV2` or a Graph
   `/users/{id}/messages?$select=internetMessageHeaders` per-recipient call.
 
 ---
@@ -220,13 +220,13 @@ union url_hits, domain_hits
 ```
 
 This query is intentionally aggressive on confidence (>=70). Drop to 50 if
-your TI feed is well curated, raise to 80 if you are getting noisy hits.
+our TI feed is well curated, raise to 80 if we are getting noisy hits.
 The `union` is cheap because both legs are small after the IOC filter; the
-expensive operation is the final `EmailEvents` join, which you should
+expensive operation is the final `EmailEvents` join, which we should
 constrain by lookback rather than by additional filters (Microsoft
 optimises window queries on `Timestamp`).
 
-If your TI feed is large (millions of indicators), the `join kind=inner` on
+If our TI feed is large (millions of indicators), the `join kind=inner` on
 `Url` will degrade. Two mitigations:
 
 1. Pre-filter IOCs to `ThreatType in ("Phishing", "MalwareHost")` before
@@ -261,7 +261,7 @@ GET https://graph.microsoft.com/v1.0/users/{recipient}/messages?
 ```
 
 This requires `Mail.Read` (application) scoped via RBAC for Applications to
-the recipients you care about. Without scope, you are granting a remediation
+the recipients we care about. Without scope, we are granting a remediation
 worker tenant-wide read of every mailbox, which is unacceptable.
 
 Fanning out across thousands of recipients hits the Graph 4-concurrent-
@@ -294,7 +294,7 @@ OfficeActivity
 | project TimeGenerated, UserId, Operation, ForwardTarget, ForwardDomain
 ```
 
-Substitute your accepted domains in the `IsExternal` calculation. If you
+Substitute our accepted domains in the `IsExternal` calculation. If we
 have many accepted domains, store them in a `AcceptedDomains` watchlist
 and look up against that.
 
@@ -308,8 +308,8 @@ rule and forces a password reset.
 
 ## Q8. Distribution-list expansion and recipient enumeration
 
-**Use it for:** the case where a phish was sent to a DL, you've pulled the
-DL members, and you want to confirm every member actually received the
+**Use it for:** the case where a phish was sent to a DL, we've pulled the
+DL members, and we want to confirm every member actually received the
 mail (delivery to a DL fans out at the gateway, but if a member has a
 forwarding rule or is on retention/legal-hold, behaviour can differ).
 
@@ -340,9 +340,9 @@ expanded to actually got the mail.
 
 ## Q9. Reporter precision scoreboard
 
-**Use it for:** ranking your reporters by how often their reports turn out
+**Use it for:** ranking our reporters by how often their reports turn out
 to be real phish. The output drives a `HighPrecision_Reporters` watchlist
-that you use to escalate severity automatically.
+that we use to escalate severity automatically.
 
 ```kusto
 let lookback = 30d;
@@ -388,7 +388,7 @@ OfficeActivity
 ```
 
 The RecordType numbers are the audit log record categories. They change
-occasionally; if a category goes missing in your tenant, look up the
+occasionally; if a category goes missing in our tenant, look up the
 current set in the Microsoft Audit Log schema reference.
 
 ---
@@ -419,7 +419,7 @@ recent
 ```
 
 Threshold of 50 messages and a 5x multiplier will catch most worth-acting-
-on storms in a 10k-mailbox tenant. Tune both values for your size. If your
+on storms in a 10k-mailbox tenant. Tune both values for our size. If our
 baseline is very low (small tenant, executive-mailbox-only scope), the 5x
 rule will fire on noise; switch to a fixed-threshold rule.
 
@@ -428,7 +428,7 @@ rule will fire on noise; switch to a fixed-threshold rule.
 ## Q12. Look-alike sender domain detection (display-name spoof)
 
 **Use it for:** catching display-name spoofs of internal executives. MDO's
-anti-phish impersonation policy already handles this for users you have
+anti-phish impersonation policy already handles this for users we have
 explicitly tagged in `TargetedUsersToProtect`, but coverage is patchy and
 the limit is 350 protected users per policy. This query is the safety net.
 
@@ -449,6 +449,6 @@ EmailEvents
 
 The query joins on display name, which is the spoof surface that bypasses
 SPF/DKIM/DMARC. False positives are rare (exact display-name collisions
-between legitimate non-employee senders and your executives). When they
+between legitimate non-employee senders and our executives). When they
 happen, allowlist the sender domain in the `Sender_Allowlist` watchlist
 and add a NOT clause on join.

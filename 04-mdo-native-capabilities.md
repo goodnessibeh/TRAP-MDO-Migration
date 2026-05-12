@@ -290,7 +290,7 @@ audited not to be suppressed by an alert tuning rule that would gate AIR):
 
 Audit `Get-ProtectionAlert` for any custom suppressions; particularly the
 built-in alert tuning rule **"Auto-Resolve - Email reported by user as
-malware or phish"**. disable it if you need AIR to react to user-reported
+malware or phish"**. disable it if we need AIR to react to user-reported
 phish (the AIR docs explicitly call this out).
 
 ---

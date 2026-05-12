@@ -57,7 +57,7 @@ Two stacked controls (the second supersedes the first):
    ```
 
 > ⚠ Permissions are **additive** between Entra-consented and
-> Exchange-RBAC-assigned. If you still have an unscoped `Mail.ReadWrite`
+> Exchange-RBAC-assigned. If we still have an unscoped `Mail.ReadWrite`
 > consented in Entra, the Exchange scope cannot subtract from it. Audit
 > every app's Entra consent grants and revoke any unscoped `Mail.*` before
 > relying on RBAC for Applications scoping.
@@ -246,7 +246,7 @@ Content-Type: application/json
 
 Permission: `eDiscovery.Read.All` + role assignment in the eDiscovery
 case. Practical use case: large campaigns where 10/mailbox is insufficient
-but you don't want to loop the legacy Compliance Search-Action 10 times.
+but we don't want to loop the legacy Compliance Search-Action 10 times.
 
 ---
 
@@ -406,7 +406,7 @@ share an SP across Logic Apps doing different jobs.
 
 ## 9. Migration checklist from EWS-based remediation
 
-If you are migrating from a TRAP deployment that used EWS Application
+If we are migrating from a TRAP deployment that used EWS Application
 Impersonation:
 
 1. Inventory every EWS endpoint hit by the existing tool. Build a Sentinel

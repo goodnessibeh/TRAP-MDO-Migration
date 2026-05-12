@@ -65,7 +65,7 @@ features.
 **Closest workaround:**
 
 * **Best long-term answer:** finish the mailbox migration to EXO. This is
-  the path Microsoft expects. If you have on-prem mailboxes for technical
+  the path Microsoft expects. If we have on-prem mailboxes for technical
   reasons (legacy app integration, regulatory locality), plan for their
   migration alongside the TRAP retirement.
 * **Tactical bridge:** keep a small Compliance Search-Action workflow that
@@ -80,7 +80,7 @@ features.
   EXO; the on-prem situation is similar) and we recommend against new
   builds. Migrate the mailboxes instead.
 
-If you have a large on-prem estate and no migration plan, TRAP retirement
+If we have a large on-prem estate and no migration plan, TRAP retirement
 is the wrong project right now. Migrate first, then retire.
 
 ---
@@ -110,7 +110,7 @@ tenant-scoped.
    Logic Apps live in each tenant. Cross-tenant reporting is via Sentinel
    cross-workspace KQL or a central PowerBI workspace.
 2. **Service-principal fan-out from a central tenant.** Build the central
-   playbook in your management tenant. It calls Graph with a per-tenant
+   playbook in our management tenant. It calls Graph with a per-tenant
    service principal credential set held in Key Vault, iterating across
    tenants for actions. The cost is operational: every credential rotation
    touches every tenant; every new tenant onboard touches the central
@@ -129,7 +129,7 @@ M&A scenarios with 2 to 3 tenants, option (1) is good enough.
 ## 4. The 48-hour ZAP window
 
 **What TRAP did:** retroactively retracted messages of any age, limited
-only by mail retention. We've seen TRAP customers pull a TAP-condemned
+only by mail retention. We've seen TRAP estates pull a TAP-condemned
 message 30 days after delivery.
 
 **What MDO does:** ZAP eligibility is hardcoded at **48 hours**: Beyond
@@ -170,9 +170,9 @@ re-run the search; if `EstimatedItems > 0` per mailbox, action again. In
 practice this rarely needs more than 2 to 3 iterations for typical
 campaigns. For larger cases, switch to Graph eDiscovery `purgeData`
 (100/location) or use the Defender XDR Take Action API path. The latter
-is preferable because it gives you Action Center visibility for free.
+is preferable because it gives us Action Center visibility for free.
 
-If you find yourself looping more than 3 times, you picked the wrong tool.
+If we find yourself looping more than 3 times, we picked the wrong tool.
 Move to Take Action.
 
 ---
@@ -234,7 +234,7 @@ TRAP UI.
 **Closest workaround:** KQL Q6 + a small Logic App. Returns read-state
 per recipient as a workbook tile, lookup-able from any incident.
 
-If your SOC really values having read-state in the incident UI itself,
+If our SOC really values having read-state in the incident UI itself,
 consider building a custom Defender entity-page extension via the Graph
 custom-pages model. We have not built one; it is in the realm of doable
 custom development.
@@ -250,7 +250,7 @@ documented under `/beta` only. v1.0 promotion is pending.
 use cautioned" for /beta endpoints. They can change in breaking ways with
 limited notice.
 
-**What to do:** wrap the Graph call in your own thin client library so a
+**What to do:** wrap the Graph call in our own thin client library so a
 schema change requires one update, not a sweep across every playbook.
 Watch the Microsoft Graph release notes for v1.0 promotion. When it
 happens, switch in a single deployment.
@@ -267,9 +267,9 @@ GA, auto-approved for malicious URL and file similarity clusters). There
 is no auto hard-delete, no auto move-to-junk-from-cluster, no auto
 block-sender from AIR.
 
-**Closest workaround:** if you want auto-hard-delete, build it in a
+**Closest workaround:** if we want auto-hard-delete, build it in a
 playbook. Sentinel automation rule fires on incident, playbook runs
-Defender XDR Take Action with `hardDelete`. Keep an approval gate if your
+Defender XDR Take Action with `hardDelete`. Keep an approval gate if our
 governance requires one.
 
 ---
@@ -285,9 +285,9 @@ in those clouds; only *My reporting mailbox only* is allowed.
 **Closest workaround in GCC clouds:**
 
 * Custom abuse-mailbox ingestion path (Playbook P7).
-* No Microsoft grader verdict feedback. Build your own grader workflow if
-  you need verdict cycling; otherwise live with admin-only verdict.
-* Confirm the Defender XDR Take Action API is available in your specific
+* No Microsoft grader verdict feedback. Build our own grader workflow if
+  we need verdict cycling; otherwise live with admin-only verdict.
+* Confirm the Defender XDR Take Action API is available in our specific
   national cloud variant before relying on it for remediation. Coverage
   varies and changes.
 
@@ -302,7 +302,7 @@ AIR investigations. Field-observed behaviour is that queues fall behind
 during campaign storms (>50 simultaneous investigations).
 
 **Operational implication:** during a storm, AIR remediation latency goes
-from seconds to minutes to "this is taking too long". Your SOC needs a
+from seconds to minutes to "this is taking too long". Our SOC needs a
 fallback.
 
 **Closest workaround:**
@@ -323,8 +323,8 @@ fallback.
 March 13, 2025). Apps that relied on it broke unless reconfigured to use
 RBAC for Applications and EWS app-only OAuth (or migrated to Graph).
 
-**Operational implication for TRAP-era estates:** if you migrated TRAP to
-the new model during 2024, you likely have stale scope assignments,
+**Operational implication for TRAP-era estates:** if we migrated TRAP to
+the new model during 2024, we likely have stale scope assignments,
 half-migrated app registrations, and Application Access Policies that
 either grant too much or have not been reviewed.
 
@@ -350,7 +350,7 @@ audit-friction issue and a residual blast-radius problem.
 
 **Implication for any custom integration:** anything using EWS today must
 move to Microsoft Graph before October 2026. This includes legacy TRAP-
-era abuse-mailbox pollers if you have any custom ones, custom mass-action
+era abuse-mailbox pollers if we have any custom ones, custom mass-action
 scripts, and third-party SOAR tools that integrate via EWS.
 
 **What to do:** track Microsoft's official EWS deprecation page. Build
@@ -369,8 +369,8 @@ ID, envelope-level data).
 **Implication:** any worker that mutates header-level properties (rare,
 but forensic preservation tools do this) needs to request the new scope.
 
-**What to do:** if your playbooks only soft-delete or hard-delete
-messages, you do not need this scope. If you have a custom worker that
+**What to do:** if our playbooks only soft-delete or hard-delete
+messages, we do not need this scope. If we have a custom worker that
 modifies headers (X-headers for tagging, modification of subject
 prefixes), plan to request the new scope before Dec 2026.
 

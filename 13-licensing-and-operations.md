@@ -1,6 +1,6 @@
 # Licensing and Operational Considerations
 
-What you must hold to make any of this work, what each capability costs in
+What we must hold to make any of this work, what each capability costs in
 ongoing operational terms, and the SOC ergonomics that follow from the
 architecture choices in this blueprint.
 
@@ -13,13 +13,13 @@ The minimum SKU mix for full TRAP-equivalent function:
 * **MDO P2** on every protected mailbox. Bundled in M365 E5, Office 365 E5,
   M365 A5, M365 G5. Available as an add-on to E3 / Business Premium /
   Office 365 E3.
-* **Microsoft Sentinel** on the workspace. Pay-as-you-go ingestion plus
+* **Microsoft Sentinel** on the workspace. Pay-as-we-go ingestion plus
   optional commitment tiers.
 * **Microsoft Graph** for the API surface. No SKU needed; throttling
   applies.
 * **Logic Apps** for playbooks. Consumption or Standard.
 
-What MDO P1 alone does NOT give you: AIR, Threat Explorer remediation
+What MDO P1 alone does NOT give us: AIR, Threat Explorer remediation
 actions, Campaigns view, Attack Simulation Training, Advanced Hunting on
 Email* tables, Priority Account Protection. P1 is insufficient for this
 blueprint.
@@ -42,7 +42,7 @@ What is genuinely optional but worth considering:
 
 ## 2. Sentinel ingestion budget
 
-The single largest variable cost. Plan for it before you connect anything.
+The single largest variable cost. Plan for it before we connect anything.
 
 For a 10k-mailbox tenant with the **MVP table set** enabled (EmailEvents,
 EmailPostDeliveryEvents, AlertInfo, AlertEvidence, OfficeActivity), expect
@@ -81,25 +81,25 @@ Two ways to manage this:
 
 1. **Commitment tier**: At >100 GB/day, the commitment tier saves
    substantially over PAYG. At our scale (~5 GB/day) it does not.
-2. **Selective table opt-in**: The Defender XDR connector lets you opt-in
+2. **Selective table opt-in**: The Defender XDR connector lets us opt-in
    per-table. The MVP turns on the small set; only enable the
-   high-cardinality tables when you start building Phase 2/3 hunting that
+   high-cardinality tables when we start building Phase 2/3 hunting that
    needs them.
 3. **Auxiliary log tier**: Sentinel introduced an auxiliary tier with
    substantially lower per-GB ingestion cost but higher query cost.
-   Useful for tables you want for compliance but rarely query (audit
+   Useful for tables we want for compliance but rarely query (audit
    logs primarily). Switch high-volume / low-query tables there once
-   you understand your query patterns.
+   we understand our query patterns.
 
 ---
 
 ## 3. Storage and retention
 
 * **Sentinel workspace retention.** Default 90 days; extendable to 730
-  days. Beyond 90 days you pay a per-GB-month rate. For Email* tables we
+  days. Beyond 90 days we pay a per-GB-month rate. For Email* tables we
   recommend 90 days hot, archive tier for 180+ days for compliance.
 * **Defender XDR Advanced Hunting retention.** 30 days. This is the
-  Microsoft-managed window inside Defender XDR; if you need longer, the
+  Microsoft-managed window inside Defender XDR; if we need longer, the
   tables must be ingested into Sentinel.
 * **Action Center History.** 30 days in the UI. Longer history is in the
   Unified Audit Log.
@@ -109,7 +109,7 @@ Two ways to manage this:
   via `RetentionInDays`. For long-running approval flows that span >90
   days, design escalation timeouts inside that window.
 
-For SOC operations the practical retention you need:
+For SOC operations the practical retention we need:
 
 * **Hot, queryable** (last 90 days): Sentinel hot tier.
 * **Warm, occasionally queryable** (90 days to 1 year): Sentinel archive
@@ -133,8 +133,8 @@ Recap of the limits that matter (full detail in
 | Tenant Allow/Block List | P1 1k/1k; P2 10k/5k entries per category | Be selective; do not dump every TI hit into TABL |
 
 Build a Sentinel workbook that tracks daily Graph + Defender XDR API call
-counts per playbook. This is the operational metric that tells you when
-you are about to hit a wall.
+counts per playbook. This is the operational metric that tells us when
+we are about to hit a wall.
 
 ---
 
@@ -266,7 +266,7 @@ console, one identity model, one audit trail) is still worth it.
 
 ## 10. What a "good" operational state looks like at month 6
 
-If everything in this blueprint is working as designed, six months in you
+If everything in this blueprint is working as designed, six months in we
 should see:
 
 * The SOC operates from one console (Defender XDR) for routine work and
@@ -277,7 +277,7 @@ should see:
 * TI sweep playbook is auto-approving roughly 70% of triggers (the
   KnownBad_Senders watchlist has matured).
 * Reporter Thanks Bridge fires for 100% of user reports; reporter
-  satisfaction surveys (if you do them) trend upward.
+  satisfaction surveys (if we do them) trend upward.
 * The Logic App run-health dashboard shows consistent runs with no
   retry-storm or throttling spikes.
 * The permissions review surfaces zero unauthorised additions.

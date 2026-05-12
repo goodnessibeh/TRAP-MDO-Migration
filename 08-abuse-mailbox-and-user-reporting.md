@@ -232,7 +232,7 @@ sequenceDiagram
     participant LA as Logic App\n(bridge)
 
     U->>O: click Report → Phishing
-    O->>Pre: show "Are you sure?"
+    O->>Pre: show "Are we sure?"
     Pre-->>U: confirm
     O->>Mb: forward as .eml
     O->>Sub: POST emailThreats

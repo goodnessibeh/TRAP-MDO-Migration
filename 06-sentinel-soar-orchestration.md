@@ -38,7 +38,7 @@ Email-relevant tables (opt-in):
 | `UrlClickEvents` | Safe Links click telemetry | 0.5 to 1.5 GB/day |
 | `AlertInfo`, `AlertEvidence` | Multi-product alert metadata + entities | 0.05 to 0.2 GB/day |
 
-**Deduplication rule**: when you connect this connector, tick **"Turn off
+**Deduplication rule**: when we connect this connector, tick **"Turn off
 all Microsoft incident creation rules for these products"** to stop
 double-incidenting. In unified-portal mode, all `Microsoft Security`,
 `Fusion`, and `Anomaly` incident-creation rule types are auto-disabled , 
@@ -184,7 +184,7 @@ stateless workflow co-hosting.
   channels (no per-user mailbox needed). Adaptive cards block the run until
   response or timeout.
 * **Defender for Office 365 native two-step approval**: `Add to remediation` →
-  reviewer approves in Action Center. An alternative when you don't need
+  reviewer approves in Action Center. An alternative when we don't need
   custom branching.
 
 ---

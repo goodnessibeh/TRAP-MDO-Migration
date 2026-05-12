@@ -16,7 +16,7 @@ gaps that have engineered workarounds. The remaining 10 percent is custom
 orchestration in Sentinel + Logic Apps + Microsoft Graph. No third-party
 tooling required.
 
-## What you get natively (no engineering)
+## What we get natively (no engineering)
 
 | Outcome | Microsoft component |
 |---|---|
@@ -67,15 +67,15 @@ Total bespoke engineering: **~320 hours** (≈ 2 senior engineers × 5 weeks).
 
 * Microsoft Defender Threat Intelligence (MDTI) Premium gives premium IOC
   context that the open MDTI does not.
-* Microsoft 365 Lighthouse, required only if you operate multi-tenant.
+* Microsoft 365 Lighthouse, required only if we operate multi-tenant.
 
 ## Operational shape after migration
 
 * SOC analyst time per phishing incident: **target 60 % reduction** vs. TRAP
-  (single console. Defender XDR. replaces TRAP UI + email gateway UI;
+  (one console, Defender XDR, replaces TRAP UI plus email gateway UI;
   AIR auto-remediates ~70 % of high-confidence cases without analyst).
 * MTTR (mean time to remediate) for user-reported phish:
-  TRAP baseline ≈ **3 to 8 minutes**: MDO + AIR target ≈ **2 to 5 minutes**
+  TRAP baseline ≈ **3 to 8 minutes**; MDO + AIR target ≈ **2 to 5 minutes**
   (dominant latency is AIR investigation, ~30 to 120 s, plus Compliance Search
   fan-out, ~30 to 60 s for ≤500 recipients).
 * Approval workflow: Action Center one-click is faster than TRAP's incident
@@ -86,8 +86,8 @@ Total bespoke engineering: **~320 hours** (≈ 2 senior engineers × 5 weeks).
 ## Risk register (top five)
 
 1. **Compliance Search-Action 10-item-per-mailbox limit.** For very large
-   campaigns ( > 10 messages to one mailbox), the playbook must batch. design
-   for it. (See `07-graph-and-exchange-remediation.md`.)
+   campaigns (more than 10 messages to one mailbox), the playbook must
+   batch. Design for it. (See `07-graph-and-exchange-remediation.md`.)
 2. **ApplicationImpersonation removal (Feb 2025).** Any TRAP-era automation
    that used EWS Impersonation must move to Graph + RBAC application
    permissions. This affects custom abuse-mailbox tooling, not Microsoft
@@ -110,13 +110,13 @@ before decommissioning TRAP. Detailed phasing in
 
 ## When NOT to migrate
 
-* You operate a heavily on-premises Exchange estate with no plan to move to
+* We operate a heavily on-premises Exchange estate with no plan to move to
   EXO. ZAP and AIR do not work on on-prem mailboxes; TRAP is purpose-built
   for hybrid.
-* You depend on TAP for sandboxing and have no plan to replace it. (MDO Safe
+* We depend on TAP for sandboxing and have no plan to replace it. (MDO Safe
   Attachments is the equivalent; this blueprint assumes TAP→MDO sandboxing
   migration is in scope.)
-* You require true multi-tenant cross-organisation remediation in a single
+* We require true multi-tenant cross-organisation remediation in a single
   console (e.g. an MSSP serving customers without per-tenant onboarding).
 
 For everyone else, the engineering economics favour the Microsoft stack , 

@@ -456,5 +456,5 @@ What breaks, what we do about it.
 * **KQL library**: [`09-kql-detection-library.md`](./09-kql-detection-library.md)
 * **Playbook library**: [`10-logic-apps-playbook-library.md`](./10-logic-apps-playbook-library.md)
 * **Migration plan**: [`11-implementation-roadmap.md`](./11-implementation-roadmap.md)
-* **What you cannot do**: [`12-limitations-and-gaps.md`](./12-limitations-and-gaps.md)
+* **What we cannot do**: [`12-limitations-and-gaps.md`](./12-limitations-and-gaps.md)
 * **What it costs**: [`13-licensing-and-operations.md`](./13-licensing-and-operations.md)

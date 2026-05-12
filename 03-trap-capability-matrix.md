@@ -128,7 +128,7 @@ relevant mailboxes. see security model in `02-architecture-overview.md` §6.
 
 | # | TRAP capability | Microsoft equivalent | Verdict | Implementation method | Effort |
 |---|---|---|---|---|---|
-| I1 | Single console serving multiple tenants (MSSP) | Microsoft 365 Lighthouse (limited) + Defender XDR multi-tenant management | 🟡 | Defender XDR multi-tenant view shows incidents across customer tenants you have GDAP delegation to; Take Action requires per-tenant. | 0 (license-gated) |
+| I1 | Single console serving multiple tenants (MSSP) | Microsoft 365 Lighthouse (limited) + Defender XDR multi-tenant management | 🟡 | Defender XDR multi-tenant view shows incidents across customer tenants we have GDAP delegation to; Take Action requires per-tenant. | 0 (license-gated) |
 | I2 | Cross-tenant single-action remediation | Not supported by any Microsoft API | 🔴 | Closest: Logic App fan-out across per-tenant service principals; central Sentinel collects via cross-tenant log routing. | 80 |
 | I3 | Cross-tenant TI sharing | Sentinel workspace-to-workspace TI sync; MDTI tenant-shared indicators | 🟡 | Manual workspace setup; not automatic. | 24 |
 

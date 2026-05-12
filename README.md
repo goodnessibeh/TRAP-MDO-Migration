@@ -38,7 +38,7 @@ gap-closers and the migration sequencing.
 | 10 | [Logic App Playbook Library](./10-logic-apps-playbook-library.md) | Reference playbook designs in ARM/JSON-shaped pseudocode |
 | 11 | [Implementation Roadmap](./11-implementation-roadmap.md) | Phased migration plan (parallel run → cutover → decommission), with success criteria |
 | 12 | [Limitations, Gaps, and Workarounds](./12-limitations-and-gaps.md) | Honest catalogue of what cannot be matched, why, and the closest workaround |
-| 13 | [Licensing and Operational Considerations](./13-licensing-and-operations.md) | What SKUs you must hold, what tier each capability requires, ongoing operational cost |
+| 13 | [Licensing and Operational Considerations](./13-licensing-and-operations.md) | What SKUs we must hold, what tier each capability requires, ongoing operational cost |
 
 Suggested reading order: 00 (MVP), 01 (executive summary), 02
 (architecture), 03 (capability matrix). The rest is reference material the

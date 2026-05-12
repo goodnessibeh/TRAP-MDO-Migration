@@ -5,11 +5,11 @@ Microsoft remediation APIs. Each playbook is presented as an action graph
 (not a full ARM template, that is downstream engineering work) plus the
 identity, scope, and operational caveats. We deliberately keep the action
 count low: most playbooks here are 5 to 15 actions. Anything larger is a
-sign you should split into a parent / child pattern.
+sign we should split into a parent / child pattern.
 
 All playbooks assume Logic App **Standard** with system-assigned managed
 identity. Where a step requires the Office 365 Outlook connector,
-remember it does not support service principals; you will need a SOC
+remember it does not support service principals; we will need a SOC
 service mailbox with an OAuth connection and a CA carve-out for that
 account.
 
@@ -109,11 +109,11 @@ unavailable (rare, mostly licensing edge cases).
 **Operational notes:**
 
 * Polling in step 2d is unavoidable; the search must be `Completed` before
-  you can action. In our testing, a search across `ExchangeLocation All`
+  we can action. In our testing, a search across `ExchangeLocation All`
   in a 10k-mailbox tenant takes 30 to 90 seconds.
 * The 10/mb loop in 2f rarely needs more than 2 iterations for typical
-  campaigns. If you find yourself looping more than 3 times, the campaign
-  is large enough that you should be using Graph eDiscovery purgeData
+  campaigns. If we find yourself looping more than 3 times, the campaign
+  is large enough that we should be using Graph eDiscovery purgeData
   instead (100/location).
 * Function App MI must have `Exchange.ManageAsApp` granted plus the
   Compliance Administrator + Exchange Administrator directory roles.
@@ -157,7 +157,7 @@ analytics rule (KQL Q5).
 * The 5-concurrency cap on ForEach in step 3a is intentional: respects the
   Graph 4-concurrent-per-mailbox cap and leaves headroom for other
   playbooks running in parallel.
-* If the TI feed is noisy, you will get a lot of these. Add an automation-
+* If the TI feed is noisy, we will get a lot of these. Add an automation-
   rule pre-condition that auto-approves when sender domain is on the
   `KnownBad_Senders` watchlist (which gets populated by previous TI hits
   that the SOC approved). After 30 days, ~70% of TI sweeps auto-approve
@@ -192,7 +192,7 @@ This is the MVP playbook. Documented in
   Report. The verdict-back arrives later from Microsoft's AIR Auto Feedback
   Response. Two emails is fine; the user understands them as different
   steps.
-* If your tenant has heavy reporter volume (>500/day), throttle this
+* If our tenant has heavy reporter volume (>500/day), throttle this
   playbook with an automation-rule pre-condition that fires only when
   the reporter is not in `Frequent_Reporters` watchlist (auto-populated).
   Frequent reporters get a single weekly summary instead.
@@ -230,7 +230,7 @@ This is the MVP playbook. Documented in
 * This is the playbook that closes the biggest TRAP-vs-MDO gap that we can
   reasonably close. The remaining gap (external forwards) is a telemetry
   boundary, not a workflow problem. The best mitigation is the sister
-  control in Q7: alert on auto-forward configuration changes so you catch
+  control in Q7: alert on auto-forward configuration changes so we catch
   the leak before it happens.
 * Step 4 adds an unfortunate operational reality to the SOC inbox. Many
   external forwards are legitimate (user forwarded to personal email,
@@ -279,10 +279,10 @@ This is the MVP playbook. Documented in
 
 * Recursion in 2a needs a cycle-detection guard (parent DL contains child
   DL contains parent DL). We've seen tenants where this loops infinitely
-  if you do not check.
+  if we do not check.
 * Step 4 (delivery confirmation) is what catches the edge cases:
   forwarding rules, journaling exclusions, recipients moved to on-prem.
-  Without it, you assume DL coverage equals cluster coverage. They are
+  Without it, we assume DL coverage equals cluster coverage. They are
   not always equal.
 * Defender XDR Take Action operates on the cluster (NetworkMessageId), not
   the DL. The DL expansion is therefore audit information for the SOC, not
@@ -295,7 +295,7 @@ This is the MVP playbook. Documented in
 **Trigger:** Microsoft Sentinel incident.
 **Condition:** any entity in `Mailbox` is on `VIP_Users` watchlist, OR
 any entity in `Account` is on `VIP_Users` watchlist.
-**Identity:** Logic App MI plus per-user OAuth for Outlook approval if you
+**Identity:** Logic App MI plus per-user OAuth for Outlook approval if we
 go that route, or Teams app for adaptive card approval (recommended).
 
 ```
@@ -354,7 +354,7 @@ built-in path covers the use case.
 A handful of things we learned the hard way during pilot deployments:
 
 * **Idempotency is non-negotiable.** Logic App runs can be retried by
-  Sentinel automation rules under failure conditions you do not control.
+  Sentinel automation rules under failure conditions we do not control.
   Key every remediation step on `NetworkMessageId + RecipientAddress` and
   short-circuit if the action has already been applied (check
   `EmailPostDeliveryEvents` first).
@@ -363,21 +363,21 @@ A handful of things we learned the hard way during pilot deployments:
   approvals work but the operational tax is real.
 * **HTTP+MI to Graph beats the named connectors for Microsoft APIs.** The
   named connector for Defender XDR is a thin wrapper that adds nothing but
-  some token caching; you lose the ability to add custom headers and to
+  some token caching; we lose the ability to add custom headers and to
   include the `Prefer: return=representation` header that Graph supports
-  for some endpoints. Going direct via HTTP+MI gives you full control.
+  for some endpoints. Going direct via HTTP+MI gives us full control.
 * **Always include a "do nothing" branch with a reason.** Auditors will
   ask why a playbook decided not to act. If the decision logic returns
-  nothing, you cannot answer.
-* **Graph throttling tells you to slow down before it tells you to stop.**
+  nothing, we cannot answer.
+* **Graph throttling tells us to slow down before it tells us to stop.**
   Watch `x-ms-throttle-limit-percentage` in Graph response headers; if it
-  climbs above 80%, slow your concurrency. Waiting for 429 is too late.
-* **Compliance Search-Action looped more than 3 times means you picked the
+  climbs above 80%, slow our concurrency. Waiting for 429 is too late.
+* **Compliance Search-Action looped more than 3 times means we picked the
   wrong tool.** Switch to Graph eDiscovery purgeData (100/location) or to
   Defender XDR Take Action (200k cap).
 * **Logic App run history retention defaults to 90 days on Consumption and
-  is the only forensic record of what your playbook did.** Set up a
-  scheduled export to blob storage if you need longer retention. (Long-
+  is the only forensic record of what our playbook did.** Set up a
+  scheduled export to blob storage if we need longer retention. (Long-
   running approvals that span >90 days will lose the head end of their
   history.)
 * **Test playbooks against a Sentinel incident with realistic entities,

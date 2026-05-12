@@ -1,13 +1,13 @@
 # Defender XDR, AIR, and ZAP: Action Engine Internals
 
 > The "what fires what" reference for the Microsoft action engine that
-> replaces TRAP's auto-pull worker. Three distinct subsystems , 
-> ZAP (autonomous purge), AIR (autonomous investigation + recommended
+> replaces our TRAP auto-pull worker. Three distinct subsystems:
+> ZAP (autonomous purge), AIR (autonomous investigation plus recommended
 > action), Defender XDR (unified incident, take-action API, Action Center).
 
 ---
 
-## 1. ZAP Zero-hour Auto Purge
+## 1. ZAP: Zero-hour Auto Purge
 
 Source: [`zero-hour-auto-purge`](https://learn.microsoft.com/en-us/defender-office-365/zero-hour-auto-purge).
 
@@ -23,7 +23,7 @@ mailboxes.
 
 | Limit | Value | Implication for TRAP-replacement |
 |---|---|---|
-| **Eligibility window** | **48 hours** post-delivery (hardcoded) | TRAP has no equivalent ceiling. For >48 h sweeps you must use Compliance Search-Action or Defender XDR Take Action API. |
+| **Eligibility window** | **48 hours** post-delivery (hardcoded) | TRAP has no equivalent ceiling. For >48 h sweeps we must use Compliance Search-Action or Defender XDR Take Action API. |
 | Mailbox class | **Cloud mailboxes only** | On-prem hybrid mailboxes are not ZAP-eligible. |
 | Action source | Microsoft re-classification *or* admin-submission verdict change | User reports trigger ZAP indirectly via the AIR pipeline. |
 | Audit visibility | **Not in EXO mailbox audit log as system action** | Use Threat Explorer's `Additional action = ZAP` filter or the Email entity Timeline. |
@@ -285,7 +285,7 @@ flowchart TB
 inside the 48 h window. AIR is the "human-approves-recommendation" engine
 that handles user reports and >48 h scenarios via cluster graphs. The
 Defender XDR Take Action API is the action surface both layers ultimately
-call, and is also what your SOAR (Sentinel + Logic Apps) calls when
+call, and is also what our SOAR (Sentinel + Logic Apps) calls when
 neither ZAP nor AIR can act (e.g. external TI feed sweep, hybrid mailbox
 remediation orchestration).
 
