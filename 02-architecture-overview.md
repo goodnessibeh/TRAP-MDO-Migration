@@ -1,8 +1,7 @@
 # Target-State Architecture Overview
 
-The reference architecture diagram set. For: security architects, SOAR
-engineers, Exchange engineers. Read this before the deeper docs; every
-component here is expanded later.
+The reference architecture diagram set. Read this before the deeper docs;
+every component here is expanded later.
 
 ## 1. System context
 
