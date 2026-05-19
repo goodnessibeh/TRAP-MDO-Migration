@@ -1,0 +1,16 @@
+# Nested companion repo, cloned separately by the migration steward.
+# Treated as a sibling working tree, not a submodule.
+Sentinel/
+
+# Generated audit reports
+mdo-*-audit-*.csv
+*-p2-gap.csv
+*-onprem-mailboxes.csv
+*-forwarding.csv
+pssa-findings.csv
+
+# Editor / tooling
+.vscode/
+.idea/
+*.swp
+*~
