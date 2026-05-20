@@ -206,6 +206,35 @@ Runs PSScriptAnalyzer over every script in `scripts/` against
 Warning. Use `-Fix` for auto-formatter fixes and `-OutputCsv
 .\findings.csv` to write a machine-readable report.
 
+## Step 8 — Bootstrap GitHub Issues for the migration
+
+If you're tracking the migration on GitHub Issues, this script creates
+every label, milestone, and issue in one pass — idempotent, dry-run by
+default.
+
+```powershell
+# Prereq: install GitHub CLI and log in
+# https://cli.github.com/
+gh auth login
+
+# Dry run — prints what would be created, makes no changes
+.\Setup-GitHubIssues.ps1
+
+# Apply — creates ~45 issues + 6 milestones + 20 labels
+.\Setup-GitHubIssues.ps1 -Apply
+
+# Or roll out one phase at a time
+.\Setup-GitHubIssues.ps1 -Only '0' -Apply   # Phase 0 only
+.\Setup-GitHubIssues.ps1 -Only '1' -Apply   # Phase 1 only
+```
+
+The script is idempotent: rerunning it skips anything that already
+exists (matched by name / title). Safe to keep around as a "redeploy
+the board if it gets lost" tool.
+
+See [`.github/ISSUE_TEMPLATE/`](../.github/ISSUE_TEMPLATE/) for the
+issue templates used for new ad-hoc tasks beyond this bootstrap.
+
 ---
 
 ## Troubleshooting
