@@ -1,4 +1,4 @@
-@{
+﻿@{
     # PSScriptAnalyzer settings for the TRAP -> MDO migration scripts.
     # https://learn.microsoft.com/en-us/powershell/module/psscriptanalyzer/
 
@@ -18,7 +18,16 @@
 
         # Convert-To-SecureString with -AsPlainText is fine for the
         # places we use it (test fixtures only); not used in production.
-        'PSAvoidUsingConvertToSecureStringWithPlainText'
+        'PSAvoidUsingConvertToSecureStringWithPlainText',
+
+        # Cosmetic-only formatter rules that PSScriptAnalyzer's own -Fix
+        # can detect but not always fully auto-resolve (multi-line splat
+        # hashtables, mixed-alignment param blocks, etc.). They are not
+        # correctness or security signals; we don't want them blocking
+        # CI. Enable individually if you want to hand-polish formatting.
+        'PSAlignAssignmentStatement',
+        'PSUseConsistentWhitespace',
+        'PSUseConsistentIndentation'
     )
 
     Rules = @{

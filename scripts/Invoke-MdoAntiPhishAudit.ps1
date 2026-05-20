@@ -1,4 +1,4 @@
-#Requires -Version 7.0
+﻿#Requires -Version 7.0
 #Requires -Modules ExchangeOnlineManagement
 
 <#
@@ -74,7 +74,7 @@ param(
     [string[]]$VipUsers,
     [string[]]$VipDomains,
 
-    [ValidateSet('Audit','Live')]
+    [ValidateSet('Audit', 'Live')]
     [string]$Mode = 'Audit',
 
     [string[]]$PolicyNames,
@@ -93,18 +93,18 @@ if ($Apply -and -not ($PolicyNames -or $IncludeDefaultPolicy -or $IncludeAllPoli
 
 Import-Module (Join-Path $PSScriptRoot 'common\MdoMigration.Common.psm1') -Force
 
-if (-not (Connect-MdoServices)) { exit 1 }
-Reset-MdoAuditRows
+if (-not (Connect-MdoService)) { exit 1 }
+Reset-MdoAuditRow
 
 $section = 'Anti-Phishing'
 
 # Strict-aligned target values
-$strictThreshold     = 4   # PhishThresholdLevel (1 standard - 4 most aggressive)
-$expectSpoofIntel    = $true
-$expectMailboxIntel  = $true
+$strictThreshold = 4   # PhishThresholdLevel (1 standard - 4 most aggressive)
+$expectSpoofIntel = $true
+$expectMailboxIntel = $true
 $expectMailboxIntelProtect = $true
-$expectHonorDmarc    = $true
-$expectDmarcRejectAct    = 'Quarantine'
+$expectHonorDmarc = $true
+$expectDmarcRejectAct = 'Quarantine'
 $expectDmarcQuarantineAct = 'Quarantine'
 $expectFirstContactTip = $true
 
@@ -159,8 +159,8 @@ try {
 
         if ($gaps.Count -eq 0) {
             Add-MdoAuditRow -Section $section -Check "Anti-phish policy: $($p.Identity)" `
-                            -Status 'Pass' -Value 'Aligned with Strict baseline' `
-                            -PortalArea 'AntiPhish'
+                -Status 'Pass' -Value 'Aligned with Strict baseline' `
+                -PortalArea 'AntiPhish'
             continue
         }
 
@@ -169,56 +169,56 @@ try {
         # Decide whether this policy is in scope for -Mode Live
         $inScope = $false
         if ($Apply) {
-            if ($IncludeAllPolicies)                                       { $inScope = $true }
+            if ($IncludeAllPolicies) { $inScope = $true }
             elseif ($PolicyNames -and ($PolicyNames -contains $p.Identity)) { $inScope = $true }
             elseif ($IncludeDefaultPolicy -and $p.Identity -eq 'Office365 AntiPhish Default') { $inScope = $true }
         }
 
         if (-not $inScope) {
             Add-MdoAuditRow -Section $section -Check "Anti-phish policy: $($p.Identity)" `
-                            -Status 'Warn' -Value ($gaps -join '; ') `
-                            -Recommendation $remediateCmd -PortalArea 'AntiPhish'
+                -Status 'Warn' -Value ($gaps -join '; ') `
+                -Recommendation $remediateCmd -PortalArea 'AntiPhish'
             continue
         }
 
         # Build Set-AntiPhishPolicy splat. Only override Targeted* if the
         # caller supplied VIP lists — never silently blank existing tuning.
         $setParams = @{
-            Identity                              = $p.Identity
-            PhishThresholdLevel                   = $strictThreshold
-            EnableSpoofIntelligence               = $true
-            EnableMailboxIntelligence             = $true
-            EnableMailboxIntelligenceProtection   = $true
-            HonorDmarcPolicy                      = $true
-            DmarcRejectAction                     = 'Quarantine'
-            DmarcQuarantineAction                 = 'Quarantine'
-            EnableFirstContactSafetyTips          = $true
-            EnableTargetedUserProtection          = $true
+            Identity                            = $p.Identity
+            PhishThresholdLevel                 = $strictThreshold
+            EnableSpoofIntelligence             = $true
+            EnableMailboxIntelligence           = $true
+            EnableMailboxIntelligenceProtection = $true
+            HonorDmarcPolicy                    = $true
+            DmarcRejectAction = 'Quarantine'
+            DmarcQuarantineAction = 'Quarantine'
+            EnableFirstContactSafetyTips        = $true
+            EnableTargetedUserProtection = $true
         }
-        if ($VipUsers)   { $setParams['TargetedUsersToProtect']   = $VipUsers }
+        if ($VipUsers) { $setParams['TargetedUsersToProtect'] = $VipUsers }
         if ($VipDomains) { $setParams['TargetedDomainsToProtect'] = $VipDomains }
 
         if ($PSCmdlet.ShouldProcess($p.Identity, 'Set-AntiPhishPolicy (Strict baseline)')) {
             try {
                 Set-AntiPhishPolicy @setParams -ErrorAction Stop | Out-Null
                 Add-MdoAuditRow -Section $section -Check "Anti-phish policy: $($p.Identity)" `
-                                -Status 'Applied' `
-                                -Value "Closed gaps: $($gaps -join '; ')" `
-                                -PortalArea 'AntiPhish'
+                    -Status 'Applied' `
+                    -Value "Closed gaps: $($gaps -join '; ')" `
+                    -PortalArea 'AntiPhish'
             }
             catch {
                 Add-MdoAuditRow -Section $section -Check "Anti-phish policy: $($p.Identity)" `
-                                -Status 'Error' -Value $_.Exception.Message `
-                                -Recommendation $remediateCmd -PortalArea 'AntiPhish'
+                    -Status 'Error' -Value $_.Exception.Message `
+                    -Recommendation $remediateCmd -PortalArea 'AntiPhish'
             }
         }
     }
 
     if (-not $policies) {
         Add-MdoAuditRow -Section $section -Check 'Anti-phish policy inventory' -Status 'Fail' `
-                        -Value 'No anti-phish policies returned' `
-                        -Recommendation 'Apply Strict preset (creates one automatically), or New-AntiPhishPolicy' `
-                        -PortalArea 'AntiPhish'
+            -Value 'No anti-phish policies returned' `
+            -Recommendation 'Apply Strict preset (creates one automatically), or New-AntiPhishPolicy' `
+            -PortalArea 'AntiPhish'
     }
 }
 catch {
@@ -231,15 +231,15 @@ try {
     $rules = Get-AntiPhishRule
     foreach ($r in $rules) {
         $scopeParts = @()
-        if ($r.SentTo)            { $scopeParts += "SentTo=$($r.SentTo.Count) recipients" }
-        if ($r.SentToMemberOf)    { $scopeParts += "SentToMemberOf=$($r.SentToMemberOf.Count) groups" }
+        if ($r.SentTo) { $scopeParts += "SentTo=$($r.SentTo.Count) recipients" }
+        if ($r.SentToMemberOf) { $scopeParts += "SentToMemberOf=$($r.SentToMemberOf.Count) groups" }
         if ($r.RecipientDomainIs) { $scopeParts += "RecipientDomainIs=$(($r.RecipientDomainIs) -join ',')" }
-        if (-not $scopeParts)     { $scopeParts += '(no scope set)' }
+        if (-not $scopeParts) { $scopeParts += '(no scope set)' }
 
         Add-MdoAuditRow -Section $section -Check "Anti-phish rule: $($r.Name)" `
-                        -Status 'Info' `
-                        -Value "State=$($r.State); Priority=$($r.Priority); Policy=$($r.AntiPhishPolicy); Scope=$($scopeParts -join '; ')" `
-                        -PortalArea 'AntiPhish'
+            -Status 'Info' `
+            -Value "State=$($r.State); Priority=$($r.Priority); Policy=$($r.AntiPhishPolicy); Scope=$($scopeParts -join '; ')" `
+            -PortalArea 'AntiPhish'
     }
 }
 catch {
@@ -253,16 +253,16 @@ try {
     if ($default) {
         if ($default.PhishThresholdLevel -ge 3) {
             Add-MdoAuditRow -Section $section -Check 'Default anti-phish policy (catches gaps)' `
-                            -Status 'Pass' `
-                            -Value "PhishThresholdLevel=$($default.PhishThresholdLevel) (>=3)" `
-                            -PortalArea 'AntiPhish'
+                -Status 'Pass' `
+                -Value "PhishThresholdLevel=$($default.PhishThresholdLevel) (>=3)" `
+                -PortalArea 'AntiPhish'
         }
         else {
             Add-MdoAuditRow -Section $section -Check 'Default anti-phish policy (catches gaps)' `
-                            -Status 'Warn' `
-                            -Value "PhishThresholdLevel=$($default.PhishThresholdLevel) too low" `
-                            -Recommendation 'Set-AntiPhishPolicy -Identity "Office365 AntiPhish Default" -PhishThresholdLevel 3' `
-                            -PortalArea 'AntiPhish'
+                -Status 'Warn' `
+                -Value "PhishThresholdLevel=$($default.PhishThresholdLevel) too low" `
+                -Recommendation 'Set-AntiPhishPolicy -Identity "Office365 AntiPhish Default" -PhishThresholdLevel 3' `
+                -PortalArea 'AntiPhish'
         }
     }
 }

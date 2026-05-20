@@ -1,4 +1,4 @@
-#Requires -Version 7.0
+﻿#Requires -Version 7.0
 #Requires -Modules ExchangeOnlineManagement
 
 <#
@@ -62,7 +62,7 @@ param(
     [string[]]$PilotGroups,
     [switch]$WidenToAll,
 
-    [ValidateSet('Audit','Live')]
+    [ValidateSet('Audit', 'Live')]
     [string]$Mode = 'Audit'
 )
 
@@ -81,8 +81,8 @@ if ($Apply -and -not ($PilotUsers -or $PilotGroups -or $WidenToAll)) {
 
 Import-Module (Join-Path $PSScriptRoot 'common\MdoMigration.Common.psm1') -Force
 
-if (-not (Connect-MdoServices)) { exit 1 }
-Reset-MdoAuditRows
+if (-not (Connect-MdoService)) { exit 1 }
+Reset-MdoAuditRow
 
 $section = 'Threat Policies'
 
@@ -92,9 +92,9 @@ function Get-RuleScopeDescription {
     param($Rule)
     if (-not $Rule) { return 'rule missing' }
     $parts = @()
-    if ($Rule.SentTo)             { $parts += "SentTo($(($Rule.SentTo) -join ','))" }
-    if ($Rule.SentToMemberOf)     { $parts += "SentToMemberOf($(($Rule.SentToMemberOf) -join ','))" }
-    if ($Rule.RecipientDomainIs)  { $parts += "RecipientDomainIs($(($Rule.RecipientDomainIs) -join ','))" }
+    if ($Rule.SentTo) { $parts += "SentTo($(($Rule.SentTo) -join ','))" }
+    if ($Rule.SentToMemberOf) { $parts += "SentToMemberOf($(($Rule.SentToMemberOf) -join ','))" }
+    if ($Rule.RecipientDomainIs) { $parts += "RecipientDomainIs($(($Rule.RecipientDomainIs) -join ','))" }
     if (-not $parts) { return 'no scope set (effectively none)' }
     return ($parts -join '; ')
 }
@@ -103,9 +103,9 @@ try {
     $eopStrict = Get-EOPProtectionPolicyRule -Identity 'Strict Preset Security Policy' -ErrorAction SilentlyContinue
     $atpStrict = Get-ATPProtectionPolicyRule -Identity 'Strict Preset Security Policy' -ErrorAction SilentlyContinue
 
-    foreach ($pair in @(@('EOP',$eopStrict), @('ATP',$atpStrict))) {
+    foreach ($pair in @(@('EOP', $eopStrict), @('ATP', $atpStrict))) {
         $stack = $pair[0]
-        $rule  = $pair[1]
+        $rule = $pair[1]
         if ($rule) {
             $statusValue = 'Pass'
             $recommendation = ''
@@ -114,18 +114,18 @@ try {
                 $recommendation = 'Enable via portal -> Preset security policies, or via Enable-EOPProtectionPolicyRule / Enable-ATPProtectionPolicyRule'
             }
             Add-MdoAuditRow -Section $section `
-                            -Check "Strict preset rule ($stack)" `
-                            -Status $statusValue `
-                            -Value "State=$($rule.State); $(Get-RuleScopeDescription -Rule $rule)" `
-                            -Recommendation $recommendation `
-                            -PortalArea 'PresetSecurityPolicies'
+                -Check "Strict preset rule ($stack)" `
+                -Status $statusValue `
+                -Value "State=$($rule.State); $(Get-RuleScopeDescription -Rule $rule)" `
+                -Recommendation $recommendation `
+                -PortalArea 'PresetSecurityPolicies'
         }
         else {
             Add-MdoAuditRow -Section $section `
-                            -Check "Strict preset rule ($stack)" -Status 'Fail' `
-                            -Value 'Not present (preset never applied)' `
-                            -Recommendation 'Enable Strict preset via the Defender portal -> Preset security policies' `
-                            -PortalArea 'PresetSecurityPolicies'
+                -Check "Strict preset rule ($stack)" -Status 'Fail' `
+                -Value 'Not present (preset never applied)' `
+                -Recommendation 'Enable Strict preset via the Defender portal -> Preset security policies' `
+                -PortalArea 'PresetSecurityPolicies'
         }
     }
 }
@@ -136,11 +136,11 @@ catch {
 # --- 2. Pilot scoping (optional, only on -Apply) ---------------------------
 
 if ($Apply -and ($PilotUsers -or $PilotGroups)) {
-    foreach ($stack in @('EOP','ATP')) {
+    foreach ($stack in @('EOP', 'ATP')) {
         $cmdlet = "Set-${stack}ProtectionPolicyRule"
         $enableCmdlet = "Enable-${stack}ProtectionPolicyRule"
         $params = @{ Identity = 'Strict Preset Security Policy' }
-        if ($PilotUsers)  { $params['SentTo'] = $PilotUsers }
+        if ($PilotUsers) { $params['SentTo'] = $PilotUsers }
         if ($PilotGroups) { $params['SentToMemberOf'] = $PilotGroups }
         # Clear any prior RecipientDomainIs so scope is the named pilot only
         $params['RecipientDomainIs'] = $null
@@ -150,43 +150,43 @@ if ($Apply -and ($PilotUsers -or $PilotGroups)) {
                 & $cmdlet @params -ErrorAction Stop | Out-Null
                 & $enableCmdlet -Identity 'Strict Preset Security Policy' -ErrorAction Stop | Out-Null
                 $scopeText = @()
-                if ($PilotUsers)  { $scopeText += "users=$(($PilotUsers) -join ',')" }
+                if ($PilotUsers) { $scopeText += "users=$(($PilotUsers) -join ',')" }
                 if ($PilotGroups) { $scopeText += "groups=$(($PilotGroups) -join ',')" }
                 Add-MdoAuditRow -Section $section `
-                                -Check "Scope Strict preset ($stack) to pilot" `
-                                -Status 'Applied' -Value ($scopeText -join '; ') `
-                                -PortalArea 'PresetSecurityPolicies'
+                    -Check "Scope Strict preset ($stack) to pilot" `
+                    -Status 'Applied' -Value ($scopeText -join '; ') `
+                    -PortalArea 'PresetSecurityPolicies'
             }
             catch {
                 Add-MdoAuditRow -Section $section `
-                                -Check "Scope Strict preset ($stack) to pilot" `
-                                -Status 'Error' -Value $_.Exception.Message
+                    -Check "Scope Strict preset ($stack) to pilot" `
+                    -Status 'Error' -Value $_.Exception.Message
             }
         }
     }
 }
 elseif ($Apply -and $WidenToAll) {
-    foreach ($stack in @('EOP','ATP')) {
+    foreach ($stack in @('EOP', 'ATP')) {
         $cmdlet = "Set-${stack}ProtectionPolicyRule"
         $params = @{
-            Identity          = 'Strict Preset Security Policy'
-            SentTo            = $null
-            SentToMemberOf    = $null
+            Identity = 'Strict Preset Security Policy'
+            SentTo = $null
+            SentToMemberOf = $null
             RecipientDomainIs = (Get-AcceptedDomain | ForEach-Object DomainName)
         }
         if ($PSCmdlet.ShouldProcess("Strict preset rule ($stack)", 'Widen scope to all accepted domains')) {
             try {
                 & $cmdlet @params -ErrorAction Stop | Out-Null
                 Add-MdoAuditRow -Section $section `
-                                -Check "Widen Strict preset ($stack) to all domains" `
-                                -Status 'Applied' `
-                                -Value "RecipientDomainIs=$(($params['RecipientDomainIs']) -join ',')" `
-                                -PortalArea 'PresetSecurityPolicies'
+                    -Check "Widen Strict preset ($stack) to all domains" `
+                    -Status 'Applied' `
+                    -Value "RecipientDomainIs=$(($params['RecipientDomainIs']) -join ',')" `
+                    -PortalArea 'PresetSecurityPolicies'
             }
             catch {
                 Add-MdoAuditRow -Section $section `
-                                -Check "Widen Strict preset ($stack) to all domains" `
-                                -Status 'Error' -Value $_.Exception.Message
+                    -Check "Widen Strict preset ($stack) to all domains" `
+                    -Status 'Error' -Value $_.Exception.Message
             }
         }
     }
@@ -198,39 +198,39 @@ try {
     $malZapBad = Get-MalwareFilterPolicy | Where-Object { -not $_.ZapEnabled }
     if ($malZapBad) {
         Add-MdoAuditRow -Section $section -Check 'Anti-malware ZAP enabled' -Status 'Warn' `
-                        -Value "Disabled on: $(($malZapBad.Identity) -join ', ')" `
-                        -Recommendation 'Set-MalwareFilterPolicy -Identity <name> -ZapEnabled $true' `
-                        -PortalArea 'AntiMalware'
+            -Value "Disabled on: $(($malZapBad.Identity) -join ', ')" `
+            -Recommendation 'Set-MalwareFilterPolicy -Identity <name> -ZapEnabled $true' `
+            -PortalArea 'AntiMalware'
     }
     else {
         Add-MdoAuditRow -Section $section -Check 'Anti-malware ZAP enabled' -Status 'Pass' `
-                        -Value 'On for all policies' -PortalArea 'AntiMalware'
+            -Value 'On for all policies' -PortalArea 'AntiMalware'
     }
 
     $contentBad = Get-HostedContentFilterPolicy |
-                  Where-Object { -not ($_.PhishZapEnabled -and $_.SpamZapEnabled) }
+        Where-Object { -not ($_.PhishZapEnabled -and $_.SpamZapEnabled) }
     if ($contentBad) {
         Add-MdoAuditRow -Section $section -Check 'Anti-spam/phish ZAP enabled' -Status 'Warn' `
-                        -Value "Phish/Spam ZAP off on: $(($contentBad.Identity) -join ', ')" `
-                        -Recommendation 'Set-HostedContentFilterPolicy -Identity <name> -PhishZapEnabled $true -SpamZapEnabled $true' `
-                        -PortalArea 'AntiSpamInbound'
+            -Value "Phish/Spam ZAP off on: $(($contentBad.Identity) -join ', ')" `
+            -Recommendation 'Set-HostedContentFilterPolicy -Identity <name> -PhishZapEnabled $true -SpamZapEnabled $true' `
+            -PortalArea 'AntiSpamInbound'
     }
     else {
         Add-MdoAuditRow -Section $section -Check 'Anti-spam/phish ZAP enabled' -Status 'Pass' `
-                        -Value 'On for all policies' -PortalArea 'AntiSpamInbound'
+            -Value 'On for all policies' -PortalArea 'AntiSpamInbound'
     }
 
     $phishActionBad = Get-HostedContentFilterPolicy |
-                      Where-Object { $_.HighConfidencePhishAction -ne 'Quarantine' }
+        Where-Object { $_.HighConfidencePhishAction -ne 'Quarantine' }
     if ($phishActionBad) {
         Add-MdoAuditRow -Section $section -Check 'HighConfidencePhishAction = Quarantine' -Status 'Warn' `
-                        -Value (($phishActionBad | ForEach-Object { "$($_.Identity)=$($_.HighConfidencePhishAction)" }) -join ', ') `
-                        -Recommendation 'Set-HostedContentFilterPolicy -Identity <name> -HighConfidencePhishAction Quarantine' `
-                        -PortalArea 'AntiSpamInbound'
+            -Value (($phishActionBad | ForEach-Object { "$($_.Identity)=$($_.HighConfidencePhishAction)" }) -join ', ') `
+            -Recommendation 'Set-HostedContentFilterPolicy -Identity <name> -HighConfidencePhishAction Quarantine' `
+            -PortalArea 'AntiSpamInbound'
     }
     else {
         Add-MdoAuditRow -Section $section -Check 'HighConfidencePhishAction = Quarantine' -Status 'Pass' `
-                        -PortalArea 'AntiSpamInbound'
+            -PortalArea 'AntiSpamInbound'
     }
 }
 catch {
@@ -244,7 +244,7 @@ try {
     foreach ($p in $malPolicies) {
         $row = "EnableFileFilter=$($p.EnableFileFilter); FileTypes=$(($p.FileTypes | Select-Object -First 5) -join ',')..."
         Add-MdoAuditRow -Section $section -Check "Anti-malware policy: $($p.Identity)" -Status 'Info' `
-                        -Value $row -PortalArea 'AntiMalware'
+            -Value $row -PortalArea 'AntiMalware'
     }
 }
 catch {
@@ -263,9 +263,9 @@ try {
             $rec = 'Set-SafeAttachmentPolicy -Identity <name> -Enable $true'
         }
         Add-MdoAuditRow -Section $section -Check "Safe Attachments policy: $($p.Identity)" `
-                        -Status $statusVal `
-                        -Value "Enable=$($p.Enable); Action=$($p.Action); Redirect=$($p.Redirect)" `
-                        -Recommendation $rec -PortalArea 'SafeAttachments'
+            -Status $statusVal `
+            -Value "Enable=$($p.Enable); Action=$($p.Action); Redirect=$($p.Redirect)" `
+            -Recommendation $rec -PortalArea 'SafeAttachments'
     }
 }
 catch {
@@ -285,7 +285,7 @@ try {
         }
         $row = "Email=$($p.EnableSafeLinksForEmail); Teams=$($p.EnableSafeLinksForTeams); Office=$($p.EnableSafeLinksForOffice); ScanAfterDeliver=$($p.DeliverMessageAfterScan); UrlRewriteDisabled=$($p.DisableUrlRewrite)"
         Add-MdoAuditRow -Section $section -Check "Safe Links policy: $($p.Identity)" `
-                        -Status $statusVal -Value $row -Recommendation $rec -PortalArea 'SafeLinks'
+            -Status $statusVal -Value $row -Recommendation $rec -PortalArea 'SafeLinks'
     }
 }
 catch {

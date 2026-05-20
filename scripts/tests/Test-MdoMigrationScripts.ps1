@@ -93,9 +93,9 @@ foreach ($file in $targets) {
     }
 }
 
-$errorCount   = ($findings | Where-Object Severity -eq 'Error').Count
-$warningCount = ($findings | Where-Object Severity -eq 'Warning').Count
-$infoCount    = ($findings | Where-Object Severity -eq 'Information').Count
+$errorCount   = @($findings | Where-Object Severity -eq 'Error').Count
+$warningCount = @($findings | Where-Object Severity -eq 'Warning').Count
+$infoCount    = @($findings | Where-Object Severity -eq 'Information').Count
 
 Write-Host ''
 Write-Host 'PSScriptAnalyzer summary:' -ForegroundColor White

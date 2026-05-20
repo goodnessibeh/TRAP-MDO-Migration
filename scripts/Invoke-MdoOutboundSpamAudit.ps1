@@ -1,4 +1,4 @@
-#Requires -Version 7.0
+﻿#Requires -Version 7.0
 #Requires -Modules ExchangeOnlineManagement
 
 <#
@@ -63,7 +63,7 @@ param(
     [string]$OutputCsv = ".\mdo-outbound-spam-audit-$(Get-Date -Format yyyyMMdd-HHmm).csv",
     [string[]]$NotifyRecipients,
 
-    [ValidateSet('Audit','Live')]
+    [ValidateSet('Audit', 'Live')]
     [string]$Mode = 'Audit',
 
     [string[]]$PolicyNames,
@@ -82,17 +82,17 @@ if ($Apply -and -not ($PolicyNames -or $IncludeDefaultPolicy -or $IncludeAllPoli
 
 Import-Module (Join-Path $PSScriptRoot 'common\MdoMigration.Common.psm1') -Force
 
-if (-not (Connect-MdoServices)) { exit 1 }
-Reset-MdoAuditRows
+if (-not (Connect-MdoService)) { exit 1 }
+Reset-MdoAuditRow
 
 $section = 'Outbound Spam'
 
 # Strict baseline (per Microsoft's preset policies docs)
 $strictExternalPerHour = 400
 $strictInternalPerHour = 800
-$strictPerDay          = 800
+$strictPerDay = 800
 $strictActionThreshold = 'BlockUser'
-$strictAutoForwarding  = 'Off'
+$strictAutoForwarding = 'Off'
 
 try {
     $policies = Get-HostedOutboundSpamFilterPolicy
@@ -131,8 +131,8 @@ try {
 
         if ($gaps.Count -eq 0) {
             Add-MdoAuditRow -Section $section -Check "Outbound spam policy: $($p.Identity)" `
-                            -Status 'Pass' -Value 'Aligned with Strict baseline' `
-                            -PortalArea 'AntiSpamOutbound'
+                -Status 'Pass' -Value 'Aligned with Strict baseline' `
+                -PortalArea 'AntiSpamOutbound'
             continue
         }
 
@@ -144,43 +144,43 @@ try {
         # Decide whether this policy is in scope for -Mode Live
         $inScope = $false
         if ($Apply) {
-            if ($IncludeAllPolicies)                                       { $inScope = $true }
+            if ($IncludeAllPolicies) { $inScope = $true }
             elseif ($PolicyNames -and ($PolicyNames -contains $p.Identity)) { $inScope = $true }
-            elseif ($IncludeDefaultPolicy -and $p.Identity -eq 'Default')   { $inScope = $true }
+            elseif ($IncludeDefaultPolicy -and $p.Identity -eq 'Default') { $inScope = $true }
         }
 
         if (-not $inScope) {
             Add-MdoAuditRow -Section $section -Check "Outbound spam policy: $($p.Identity)" `
-                            -Status 'Warn' -Value ($gaps -join '; ') `
-                            -Recommendation $fixCmd -PortalArea 'AntiSpamOutbound'
+                -Status 'Warn' -Value ($gaps -join '; ') `
+                -Recommendation $fixCmd -PortalArea 'AntiSpamOutbound'
             continue
         }
 
         $setParams = @{
-            Identity                       = $p.Identity
-            RecipientLimitExternalPerHour  = $strictExternalPerHour
-            RecipientLimitInternalPerHour  = $strictInternalPerHour
-            RecipientLimitPerDay           = $strictPerDay
-            ActionWhenThresholdReached     = $strictActionThreshold
-            AutoForwardingMode             = 'Off'
+            Identity = $p.Identity
+            RecipientLimitExternalPerHour = $strictExternalPerHour
+            RecipientLimitInternalPerHour = $strictInternalPerHour
+            RecipientLimitPerDay = $strictPerDay
+            ActionWhenThresholdReached    = $strictActionThreshold
+            AutoForwardingMode = 'Off'
         }
         if ($NotifyRecipients) {
-            $setParams['NotifyOutboundSpam']             = $true
-            $setParams['NotifyOutboundSpamRecipients']   = $NotifyRecipients
+            $setParams['NotifyOutboundSpam'] = $true
+            $setParams['NotifyOutboundSpamRecipients'] = $NotifyRecipients
         }
 
         if ($PSCmdlet.ShouldProcess($p.Identity, 'Set-HostedOutboundSpamFilterPolicy (Strict baseline)')) {
             try {
                 Set-HostedOutboundSpamFilterPolicy @setParams -ErrorAction Stop | Out-Null
                 Add-MdoAuditRow -Section $section -Check "Outbound spam policy: $($p.Identity)" `
-                                -Status 'Applied' `
-                                -Value "Closed gaps: $($gaps -join '; ')" `
-                                -PortalArea 'AntiSpamOutbound'
+                    -Status 'Applied' `
+                    -Value "Closed gaps: $($gaps -join '; ')" `
+                    -PortalArea 'AntiSpamOutbound'
             }
             catch {
                 Add-MdoAuditRow -Section $section -Check "Outbound spam policy: $($p.Identity)" `
-                                -Status 'Error' -Value $_.Exception.Message `
-                                -Recommendation $fixCmd -PortalArea 'AntiSpamOutbound'
+                    -Status 'Error' -Value $_.Exception.Message `
+                    -Recommendation $fixCmd -PortalArea 'AntiSpamOutbound'
             }
         }
     }
@@ -194,8 +194,8 @@ try {
     $rules = Get-HostedOutboundSpamFilterRule
     foreach ($r in $rules) {
         Add-MdoAuditRow -Section $section -Check "Outbound spam rule: $($r.Name)" -Status 'Info' `
-                        -Value "State=$($r.State); Policy=$($r.HostedOutboundSpamFilterPolicy); From=$(($r.From) -join ','); FromMemberOf=$(($r.FromMemberOf) -join ',')" `
-                        -PortalArea 'AntiSpamOutbound'
+            -Value "State=$($r.State); Policy=$($r.HostedOutboundSpamFilterPolicy); From=$(($r.From) -join ','); FromMemberOf=$(($r.FromMemberOf) -join ',')" `
+            -PortalArea 'AntiSpamOutbound'
     }
 }
 catch {
@@ -205,25 +205,25 @@ catch {
 # Tenant-wide auto-forwarding inspection (sensitive for outbound spam)
 try {
     $acceptedDomains = (Get-AcceptedDomain).DomainName
-    $domainPattern   = '@(' + (($acceptedDomains | ForEach-Object { [regex]::Escape($_) }) -join '|') + ')$'
+    $domainPattern = '@(' + (($acceptedDomains | ForEach-Object { [regex]::Escape($_) }) -join '|') + ')$'
 
     $fwdMailboxes = Get-Mailbox -ResultSize Unlimited |
-                    Where-Object { $_.ForwardingAddress -or $_.ForwardingSmtpAddress }
+        Where-Object { $_.ForwardingAddress -or $_.ForwardingSmtpAddress }
     if ($fwdMailboxes) {
         $external = $fwdMailboxes | Where-Object {
             $_.ForwardingSmtpAddress -and ($_.ForwardingSmtpAddress -notmatch $domainPattern)
         }
         $fwdStatus = $external ? 'Warn' : 'Info'
-        $fwdRec    = $external ? 'Review and disable external auto-forwarding via Set-Mailbox -ForwardingAddress $null -ForwardingSmtpAddress $null' : ''
+        $fwdRec = $external ? 'Review and disable external auto-forwarding via Set-Mailbox -ForwardingAddress $null -ForwardingSmtpAddress $null' : ''
         Add-MdoAuditRow -Section $section -Check 'Mailboxes with auto-forwarding configured' `
-                        -Status $fwdStatus `
-                        -Value "Total=$($fwdMailboxes.Count); externally-forwarding=$(($external).Count)" `
-                        -Recommendation $fwdRec `
-                        -PortalArea 'AntiSpamOutbound'
+            -Status $fwdStatus `
+            -Value "Total=$($fwdMailboxes.Count); externally-forwarding=$(($external).Count)" `
+            -Recommendation $fwdRec `
+            -PortalArea 'AntiSpamOutbound'
     }
     else {
         Add-MdoAuditRow -Section $section -Check 'Mailboxes with auto-forwarding configured' `
-                        -Status 'Pass' -Value '0' -PortalArea 'AntiSpamOutbound'
+            -Status 'Pass' -Value '0' -PortalArea 'AntiSpamOutbound'
     }
 }
 catch {

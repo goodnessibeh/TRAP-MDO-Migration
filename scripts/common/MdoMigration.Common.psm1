@@ -1,4 +1,4 @@
-#Requires -Version 7.0
+﻿#Requires -Version 7.0
 
 <#
 .SYNOPSIS
@@ -23,23 +23,23 @@ $script:AuditRows = [System.Collections.Generic.List[object]]::new()
 # Canonical Defender portal URLs (used as defaults when callers don't override)
 $script:PortalUrls = @{
     PresetSecurityPolicies = 'https://security.microsoft.com/presetSecurityPolicies'
-    AntiPhish              = 'https://security.microsoft.com/antiphishing'
-    AntiSpamInbound        = 'https://security.microsoft.com/antispam'
-    AntiSpamOutbound       = 'https://security.microsoft.com/antispam?type=outbound'
-    AntiMalware            = 'https://security.microsoft.com/antimalwarev2'
-    SafeAttachments        = 'https://security.microsoft.com/safeattachmentv2'
-    SafeLinks              = 'https://security.microsoft.com/safelinksv2'
-    AdvancedDelivery       = 'https://security.microsoft.com/advanceddelivery'
-    UserSubmission         = 'https://security.microsoft.com/securitysettings/userSubmission'
-    QuarantinePolicies     = 'https://security.microsoft.com/quarantinePolicies'
-    AlertPolicies          = 'https://security.microsoft.com/alertpoliciesv2'
-    TenantAllowBlockList   = 'https://security.microsoft.com/tenantAllowBlockList'
-    ThreatPolicies         = 'https://security.microsoft.com/threatpolicy'
-    Submissions            = 'https://security.microsoft.com/reportsubmission'
-    AirInvestigations      = 'https://security.microsoft.com/airinvestigation'
-    ActionCenterHistory    = 'https://security.microsoft.com/action-center/history'
-    Permissions            = 'https://security.microsoft.com/emailandcollabpermissions'
-    Settings               = 'https://security.microsoft.com/securitysettings'
+    AntiPhish = 'https://security.microsoft.com/antiphishing'
+    AntiSpamInbound = 'https://security.microsoft.com/antispam'
+    AntiSpamOutbound = 'https://security.microsoft.com/antispam?type=outbound'
+    AntiMalware = 'https://security.microsoft.com/antimalwarev2'
+    SafeAttachments = 'https://security.microsoft.com/safeattachmentv2'
+    SafeLinks = 'https://security.microsoft.com/safelinksv2'
+    AdvancedDelivery = 'https://security.microsoft.com/advanceddelivery'
+    UserSubmission = 'https://security.microsoft.com/securitysettings/userSubmission'
+    QuarantinePolicies = 'https://security.microsoft.com/quarantinePolicies'
+    AlertPolicies = 'https://security.microsoft.com/alertpoliciesv2'
+    TenantAllowBlockList = 'https://security.microsoft.com/tenantAllowBlockList'
+    ThreatPolicies = 'https://security.microsoft.com/threatpolicy'
+    Submissions = 'https://security.microsoft.com/reportsubmission'
+    AirInvestigations = 'https://security.microsoft.com/airinvestigation'
+    ActionCenterHistory = 'https://security.microsoft.com/action-center/history'
+    Permissions = 'https://security.microsoft.com/emailandcollabpermissions'
+    Settings = 'https://security.microsoft.com/securitysettings'
 }
 
 function Get-MdoPortalUrl {
@@ -60,7 +60,7 @@ function Get-MdoPortalUrl {
     return 'https://security.microsoft.com'
 }
 
-function Connect-MdoServices {
+function Connect-MdoService {
     <#
     .SYNOPSIS
         Connect to Exchange Online and Security & Compliance.
@@ -81,7 +81,7 @@ function Connect-MdoServices {
             return $false
         }
         $exoInfo = Get-ConnectionInformation -ErrorAction SilentlyContinue |
-                   Where-Object { $_.State -eq 'Connected' -and $_.TokenStatus -eq 'Active' }
+            Where-Object { $_.State -eq 'Connected' -and $_.TokenStatus -eq 'Active' }
         if (-not $exoInfo) {
             if (-not $Quiet) { Write-Information 'Connecting to Exchange Online...' -InformationAction Continue }
             Connect-ExchangeOnline -ShowBanner:$false | Out-Null
@@ -95,7 +95,7 @@ function Connect-MdoServices {
     if ($IncludeIPPSSession) {
         try {
             $ippsInfo = Get-ConnectionInformation -ErrorAction SilentlyContinue |
-                        Where-Object { $_.State -eq 'Connected' -and $_.ConnectionUri -match 'ps.compliance.protection' }
+                Where-Object { $_.State -eq 'Connected' -and $_.ConnectionUri -match 'ps.compliance.protection' }
             if (-not $ippsInfo) {
                 if (-not $Quiet) { Write-Information 'Connecting to Security & Compliance...' -InformationAction Continue }
                 Connect-IPPSSession -ShowBanner:$false -WarningAction SilentlyContinue | Out-Null
@@ -146,7 +146,7 @@ function Add-MdoAuditRow {
         [string]$Check,
 
         [Parameter(Mandatory)]
-        [ValidateSet('Pass','Warn','Fail','Info','Applied','Skipped','Error')]
+        [ValidateSet('Pass', 'Warn', 'Fail', 'Info', 'Applied', 'Skipped', 'Error')]
         [string]$Status,
 
         [string]$Value = '',
@@ -168,33 +168,33 @@ function Add-MdoAuditRow {
     }
 
     $row = [pscustomobject]@{
-        Timestamp          = (Get-Date).ToString('o')
-        Section            = $Section
-        Check              = $Check
-        Status             = $Status
-        Value              = $Value
-        Recommendation     = $Recommendation
-        DefenderPortalUrl  = $PortalUrl
+        Timestamp = (Get-Date).ToString('o')
+        Section = $Section
+        Check             = $Check
+        Status            = $Status
+        Value             = $Value
+        Recommendation    = $Recommendation
+        DefenderPortalUrl = $PortalUrl
     }
     $script:AuditRows.Add($row)
 
     $color = switch ($Status) {
-        'Pass'    { 'Green' }
+        'Pass' { 'Green' }
         'Applied' { 'Cyan' }
-        'Warn'    { 'Yellow' }
-        'Fail'    { 'Red' }
-        'Error'   { 'Red' }
+        'Warn' { 'Yellow' }
+        'Fail' { 'Red' }
+        'Error' { 'Red' }
         'Skipped' { 'DarkGray' }
-        default   { 'White' }
+        default { 'White' }
     }
 
     Write-Host ('[{0,-7}] {1,-28} {2}' -f $Status, $Section, $Check) -ForegroundColor $color
-    if ($Value)          { Write-Host "          value: $Value" -ForegroundColor DarkGray }
+    if ($Value) { Write-Host "          value: $Value" -ForegroundColor DarkGray }
     if ($Recommendation) { Write-Host "          fix:   $Recommendation" -ForegroundColor DarkGray }
-    if ($PortalUrl)      { Write-Host "          url:   $PortalUrl" -ForegroundColor DarkGray }
+    if ($PortalUrl) { Write-Host "          url:   $PortalUrl" -ForegroundColor DarkGray }
 }
 
-function Get-MdoAuditRows {
+function Get-MdoAuditRow {
     <#
     .SYNOPSIS
         Returns the in-memory buffer of audit rows.
@@ -205,7 +205,7 @@ function Get-MdoAuditRows {
     return $script:AuditRows.ToArray()
 }
 
-function Reset-MdoAuditRows {
+function Reset-MdoAuditRow {
     <#
     .SYNOPSIS
         Clear the audit-row buffer.
@@ -256,14 +256,14 @@ function Get-MdoFailCount {
     [CmdletBinding()]
     [OutputType([int])]
     param()
-    return ($script:AuditRows | Where-Object { $_.Status -in @('Fail','Error') }).Count
+    return ($script:AuditRows | Where-Object { $_.Status -in @('Fail', 'Error') }).Count
 }
 
 Export-ModuleMember -Function `
-    Connect-MdoServices,
-    Add-MdoAuditRow,
-    Get-MdoAuditRows,
-    Reset-MdoAuditRows,
-    Export-MdoAuditReport,
-    Get-MdoFailCount,
-    Get-MdoPortalUrl
+    Connect-MdoService,
+Add-MdoAuditRow,
+Get-MdoAuditRow,
+Reset-MdoAuditRow,
+Export-MdoAuditReport,
+Get-MdoFailCount,
+Get-MdoPortalUrl

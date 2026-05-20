@@ -1,4 +1,4 @@
-#Requires -Version 7.0
+﻿#Requires -Version 7.0
 #Requires -Modules ExchangeOnlineManagement
 
 <#
@@ -54,7 +54,7 @@ param(
         'Tenant restricted from sending email'
     ),
 
-    [ValidateSet('Audit','Live')]
+    [ValidateSet('Audit', 'Live')]
     [string]$Mode = 'Audit'
 )
 
@@ -65,8 +65,8 @@ $Apply = $Mode -eq 'Live'
 
 Import-Module (Join-Path $PSScriptRoot 'common\MdoMigration.Common.psm1') -Force
 
-if (-not (Connect-MdoServices -IncludeIPPSSession)) { exit 1 }
-Reset-MdoAuditRows
+if (-not (Connect-MdoService -IncludeIPPSSession)) { exit 1 }
+Reset-MdoAuditRow
 
 $section = 'Alert Policies'
 
@@ -74,13 +74,13 @@ $section = 'Alert Policies'
 
 try {
     $alerts = Get-ProtectionAlert
-    $totalCount    = $alerts.Count
+    $totalCount = $alerts.Count
     $disabledCount = ($alerts | Where-Object { $_.Disabled }).Count
-    $enabledCount  = $totalCount - $disabledCount
+    $enabledCount = $totalCount - $disabledCount
 
     Add-MdoAuditRow -Section $section -Check 'Alert policy inventory' -Status 'Info' `
-                    -Value "Total=$totalCount; Enabled=$enabledCount; Disabled=$disabledCount" `
-                    -PortalArea 'AlertPolicies'
+        -Value "Total=$totalCount; Enabled=$enabledCount; Disabled=$disabledCount" `
+        -PortalArea 'AlertPolicies'
 }
 catch {
     Add-MdoAuditRow -Section $section -Check 'Alert policy inventory' -Status 'Error' -Value $_.Exception.Message
@@ -92,36 +92,36 @@ catch {
 
 try {
     $autoResolve = Get-ProtectionAlert |
-                   Where-Object { $_.Name -like '*Auto-Resolve*Email reported*' }
+        Where-Object { $_.Name -like '*Auto-Resolve*Email reported*' }
 
     if (-not $autoResolve) {
         Add-MdoAuditRow -Section $section -Check 'Auto-Resolve rule for user-reported phish' `
-                        -Status 'Pass' -Value 'No matching rule found (AIR can fire)' `
-                        -PortalArea 'AlertPolicies'
+            -Status 'Pass' -Value 'No matching rule found (AIR can fire)' `
+            -PortalArea 'AlertPolicies'
     }
     else {
         $enabled = $autoResolve | Where-Object { -not $_.Disabled }
         if (-not $enabled) {
             Add-MdoAuditRow -Section $section -Check 'Auto-Resolve rule for user-reported phish' `
-                            -Status 'Pass' -Value "Rule present but disabled: $(($autoResolve.Name) -join ', ')" `
-                            -PortalArea 'AlertPolicies'
+                -Status 'Pass' -Value "Rule present but disabled: $(($autoResolve.Name) -join ', ')" `
+                -PortalArea 'AlertPolicies'
         }
         elseif ($Apply) {
             foreach ($r in $enabled) {
                 if ($PSCmdlet.ShouldProcess($r.Name, 'Disable-ProtectionAlert')) {
                     Disable-ProtectionAlert -Identity $r.Identity -ErrorAction Stop | Out-Null
                     Add-MdoAuditRow -Section $section -Check 'Auto-Resolve rule for user-reported phish' `
-                                    -Status 'Applied' -Value "Disabled: $($r.Name)" `
-                                    -PortalArea 'AlertPolicies'
+                        -Status 'Applied' -Value "Disabled: $($r.Name)" `
+                        -PortalArea 'AlertPolicies'
                 }
             }
         }
         else {
             Add-MdoAuditRow -Section $section -Check 'Auto-Resolve rule for user-reported phish' `
-                            -Status 'Warn' `
-                            -Value "Enabled rule(s) will suppress AIR: $(($enabled.Name) -join ', ')" `
-                            -Recommendation 'Rerun with -Apply, or run: Disable-ProtectionAlert -Identity <name>' `
-                            -PortalArea 'AlertPolicies'
+                -Status 'Warn' `
+                -Value "Enabled rule(s) will suppress AIR: $(($enabled.Name) -join ', ')" `
+                -Recommendation 'Rerun with -Apply, or run: Disable-ProtectionAlert -Identity <name>' `
+                -PortalArea 'AlertPolicies'
         }
     }
 }
@@ -136,25 +136,24 @@ try {
         $matching = Get-ProtectionAlert | Where-Object { $_.Name -like "*$name*" }
         if (-not $matching) {
             Add-MdoAuditRow -Section $section -Check "Critical alert: $name" `
-                            -Status 'Warn' -Value 'Alert policy not present' `
-                            -Recommendation 'Microsoft built-in alerts auto-provision once Defender is licensed; if missing for >24h, open a support case' `
-                            -PortalArea 'AlertPolicies'
+                -Status 'Warn' -Value 'Alert policy not present' `
+                -Recommendation 'Microsoft built-in alerts auto-provision once Defender is licensed; if missing for >24h, open a support case' `
+                -PortalArea 'AlertPolicies'
             continue
         }
-        $enabled  = $matching | Where-Object { -not $_.Disabled }
-        $disabled = $matching | Where-Object { $_.Disabled }
+        $enabled = $matching | Where-Object { -not $_.Disabled }
         if (-not $enabled) {
             Add-MdoAuditRow -Section $section -Check "Critical alert: $name" `
-                            -Status 'Warn' `
-                            -Value "All matching policies disabled: $(($matching.Name) -join ', ')" `
-                            -Recommendation 'Enable-ProtectionAlert -Identity <name>' `
-                            -PortalArea 'AlertPolicies'
+                -Status 'Warn' `
+                -Value "All matching policies disabled: $(($matching.Name) -join ', ')" `
+                -Recommendation 'Enable-ProtectionAlert -Identity <name>' `
+                -PortalArea 'AlertPolicies'
         }
         else {
             $detail = ($enabled | ForEach-Object { "$($_.Name) [Severity=$($_.Severity)]" }) -join '; '
             Add-MdoAuditRow -Section $section -Check "Critical alert: $name" `
-                            -Status 'Pass' -Value $detail `
-                            -PortalArea 'AlertPolicies'
+                -Status 'Pass' -Value $detail `
+                -PortalArea 'AlertPolicies'
         }
     }
 }
@@ -166,18 +165,18 @@ catch {
 
 try {
     $byCategory = Get-ProtectionAlert |
-                  Where-Object { -not $_.Disabled } |
-                  Group-Object Category |
-                  ForEach-Object { "$($_.Name)=$($_.Count)" }
+        Where-Object { -not $_.Disabled } |
+        Group-Object Category |
+        ForEach-Object { "$($_.Name)=$($_.Count)" }
     Add-MdoAuditRow -Section $section -Check 'Enabled alerts by category' -Status 'Info' `
-                    -Value ($byCategory -join '; ') -PortalArea 'AlertPolicies'
+        -Value ($byCategory -join '; ') -PortalArea 'AlertPolicies'
 
     $bySeverity = Get-ProtectionAlert |
-                  Where-Object { -not $_.Disabled } |
-                  Group-Object Severity |
-                  ForEach-Object { "$($_.Name)=$($_.Count)" }
+        Where-Object { -not $_.Disabled } |
+        Group-Object Severity |
+        ForEach-Object { "$($_.Name)=$($_.Count)" }
     Add-MdoAuditRow -Section $section -Check 'Enabled alerts by severity' -Status 'Info' `
-                    -Value ($bySeverity -join '; ') -PortalArea 'AlertPolicies'
+        -Value ($bySeverity -join '; ') -PortalArea 'AlertPolicies'
 }
 catch {
     Add-MdoAuditRow -Section $section -Check 'Alert breakdown' -Status 'Error' -Value $_.Exception.Message
@@ -190,11 +189,11 @@ try {
     if ($custom) {
         $list = ($custom | Select-Object -First 25 | ForEach-Object { $_.Name }) -join '; '
         Add-MdoAuditRow -Section $section -Check 'Custom alert policies present' -Status 'Info' `
-                        -Value "Total=$($custom.Count); first 25=$list" -PortalArea 'AlertPolicies'
+            -Value "Total=$($custom.Count); first 25=$list" -PortalArea 'AlertPolicies'
     }
     else {
         Add-MdoAuditRow -Section $section -Check 'Custom alert policies present' -Status 'Info' `
-                        -Value 'None — only Microsoft built-ins active' -PortalArea 'AlertPolicies'
+            -Value 'None — only Microsoft built-ins active' -PortalArea 'AlertPolicies'
     }
 }
 catch {
