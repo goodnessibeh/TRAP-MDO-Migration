@@ -1,0 +1,131 @@
+{
+  "$schema": "https://schema.management.azure.com/schemas/2019-04-01/deploymentTemplate.json#",
+  "contentVersion": "1.0.0.0",
+  "metadata": {
+    "title": "P7 - Custom Abuse Mailbox Ingest",
+    "description": "Polls a shared abuse mailbox for forwarded suspect emails (from legacy clients that can't use the built-in Outlook Report button) and submits each one to Microsoft via Graph submissions API. Sends thank-you reply to the reporter. Conservative defaults: triggers per-arrival, parses .eml attachments, falls back to body parsing if no attachment, marks original as read. Documented in 08-abuse-mailbox-and-user-reporting.md and 10-logic-apps-playbook-library.md P7.",
+    "prerequisites": "Shared abuse mailbox in EXO (e.g. abuse@<tenant>); Office 365 Outlook API connection authorised against that mailbox; Microsoft Graph ThreatSubmission.ReadWrite application permission on the MI; Sentinel API connection (optional, for incident creation).",
+    "lastUpdate": "2026-05-20",
+    "entities": [],
+    "tags": ["TRAP-MDO-Migration", "Phase-3", "P7", "Abuse-Mailbox", "Submissions"]
+  },
+  "parameters": {
+    "PlaybookName":           { "type": "string", "defaultValue": "trap-mdo-P7-custom-abuse-mailbox-ingest" },
+    "Office365ConnectionName": { "type": "string", "defaultValue": "office365" },
+    "AbuseMailboxAddress":    { "type": "string", "metadata": { "description": "Shared mailbox the legacy abuse flow lands in. The Office 365 connector must be authorised for this mailbox." } },
+    "ThanksFromAddress":      { "type": "string", "metadata": { "description": "Send-as address for the thank-you reply (usually soc@<tenant>)." } },
+    "Location":               { "type": "string", "defaultValue": "[resourceGroup().location]" }
+  },
+  "variables": {
+    "officeConnId": "[resourceId('Microsoft.Web/connections', parameters('Office365ConnectionName'))]",
+    "officeApi":    "[concat('/subscriptions/', subscription().subscriptionId, '/providers/Microsoft.Web/locations/', parameters('Location'), '/managedApis/office365')]"
+  },
+  "resources": [
+    {
+      "type": "Microsoft.Logic/workflows",
+      "apiVersion": "2019-05-01",
+      "name": "[parameters('PlaybookName')]",
+      "location": "[parameters('Location')]",
+      "identity": { "type": "SystemAssigned" },
+      "properties": {
+        "state": "Enabled",
+        "definition": {
+          "$schema": "https://schema.management.azure.com/providers/Microsoft.Logic/schemas/2016-06-01/workflowdefinition.json#",
+          "contentVersion": "1.0.0.0",
+          "parameters": {
+            "$connections":        { "type": "Object", "defaultValue": {} },
+            "AbuseMailboxAddress": { "type": "String", "defaultValue": "[parameters('AbuseMailboxAddress')]" },
+            "ThanksFromAddress":   { "type": "String", "defaultValue": "[parameters('ThanksFromAddress')]" }
+          },
+          "triggers": {
+            "When_a_new_email_arrives": {
+              "type": "ApiConnection",
+              "recurrence": { "frequency": "Minute", "interval": 5 },
+              "inputs": {
+                "host": { "connection": { "name": "@parameters('$connections')['office365']['connectionId']" } },
+                "method": "get",
+                "path": "/v3/Mail/OnNewEmail",
+                "queries": {
+                  "folderPath": "Inbox",
+                  "fetchOnlyUnread": true,
+                  "fetchOnlyWithAttachment": false,
+                  "mailbox": "@parameters('AbuseMailboxAddress')"
+                }
+              }
+            }
+          },
+          "actions": {
+            "Extract_subject_and_sender": {
+              "type": "Compose",
+              "runAfter": {},
+              "inputs": {
+                "subject":      "@triggerBody()?['subject']",
+                "reporterFrom": "@triggerBody()?['from']",
+                "internetMessageId": "@triggerBody()?['internetMessageId']",
+                "hasAttachment": "@coalesce(triggerBody()?['hasAttachments'], false)"
+              }
+            },
+            "Submit_to_Microsoft_via_Graph": {
+              "type": "Http",
+              "runAfter": { "Extract_subject_and_sender": [ "Succeeded" ] },
+              "inputs": {
+                "method": "POST",
+                "uri": "https://graph.microsoft.com/v1.0/security/threatSubmission/emailThreats",
+                "headers": { "Content-Type": "application/json" },
+                "authentication": { "type": "ManagedServiceIdentity", "audience": "https://graph.microsoft.com" },
+                "body": {
+                  "category": "phishing",
+                  "recipientEmailAddress": "@parameters('AbuseMailboxAddress')",
+                  "messageUrl": "https://outlook.office365.com/owa/?ItemID=@{encodeUriComponent(coalesce(triggerBody()?['id'], ''))}",
+                  "originalCategory": "notJunk",
+                  "adminReview": {
+                    "reviewBy": "@outputs('Extract_subject_and_sender').reporterFrom",
+                    "reviewDateTime": "@utcNow()"
+                  }
+                }
+              }
+            },
+            "Reply_thanks": {
+              "type": "ApiConnection",
+              "runAfter": { "Submit_to_Microsoft_via_Graph": [ "Succeeded", "Failed" ] },
+              "inputs": {
+                "host": { "connection": { "name": "@parameters('$connections')['office365']['connectionId']" } },
+                "method": "post",
+                "path": "/v2/Mail",
+                "body": {
+                  "From":    "@parameters('ThanksFromAddress')",
+                  "To":      "@outputs('Extract_subject_and_sender').reporterFrom",
+                  "Subject": "Thanks for reporting that email",
+                  "Body":    "<p>Hello,</p><p>We received your report and have submitted it to Microsoft for analysis. The security team will follow up if action is needed.</p><p>— SOC</p>",
+                  "Importance": "Normal"
+                }
+              }
+            },
+            "Mark_as_read": {
+              "type": "ApiConnection",
+              "runAfter": { "Reply_thanks": [ "Succeeded", "Failed" ] },
+              "inputs": {
+                "host": { "connection": { "name": "@parameters('$connections')['office365']['connectionId']" } },
+                "method": "patch",
+                "path": "/codeless/v1.0/me/messages/@{encodeURIComponent(triggerBody()?['id'])}",
+                "body": { "isRead": true }
+              }
+            }
+          },
+          "outputs": {}
+        },
+        "parameters": {
+          "$connections": {
+            "value": {
+              "office365": { "connectionId": "[variables('officeConnId')]", "connectionName": "[parameters('Office365ConnectionName')]", "id": "[variables('officeApi')]" }
+            }
+          }
+        }
+      }
+    }
+  ],
+  "outputs": {
+    "playbookName": { "type": "string", "value": "[parameters('PlaybookName')]" },
+    "managedIdentityPrincipalId": { "type": "string", "value": "[reference(resourceId('Microsoft.Logic/workflows', parameters('PlaybookName')), '2019-05-01', 'Full').identity.principalId]" }
+  }
+}

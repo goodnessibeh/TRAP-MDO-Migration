@@ -1,0 +1,229 @@
+{
+  "$schema": "https://schema.management.azure.com/schemas/2019-04-01/deploymentTemplate.json#",
+  "contentVersion": "1.0.0.0",
+  "metadata": {
+    "title": "P3 - Notify Reporter Bridge",
+    "description": "Acknowledges users who report suspected phishing via the built-in Outlook Report button. Bridges the gap where AIR Auto Feedback Response does not fire (e.g. message already remediated before AIR ran). Documented in 00-MDO-out-of-the-box-deployment-guide.md section 3.3 and 10-logic-apps-playbook-library.md P3.",
+    "prerequisites": "Sentinel workspace; Office 365 Outlook API connection authorised against a SOC service mailbox (e.g. soc@<tenant>); Sentinel incident analytics rule that creates incidents from the 'Email reported by user as malware or phish' alert.",
+    "lastUpdate": "2026-05-20",
+    "entities": ["Account"],
+    "tags": ["TRAP-MDO-Migration", "OOTB", "P3", "User-Reported-Phish"]
+  },
+  "parameters": {
+    "PlaybookName": {
+      "type": "string",
+      "defaultValue": "trap-mdo-P3-notify-reporter-bridge",
+      "metadata": {
+        "description": "Name of the Logic App resource."
+      }
+    },
+    "Office365ConnectionName": {
+      "type": "string",
+      "defaultValue": "office365",
+      "metadata": {
+        "description": "Name of the existing Office 365 API connection (Send email V2)."
+      }
+    },
+    "SentinelConnectionName": {
+      "type": "string",
+      "defaultValue": "azuresentinel",
+      "metadata": {
+        "description": "Name of the existing Microsoft Sentinel API connection."
+      }
+    },
+    "SocFromAddress": {
+      "type": "string",
+      "metadata": {
+        "description": "Send-as address for the acknowledgement email (must be a mailbox or shared mailbox the Office365 connection has Send-As on)."
+      }
+    },
+    "Location": {
+      "type": "string",
+      "defaultValue": "[resourceGroup().location]",
+      "metadata": {
+        "description": "Region for the Logic App."
+      }
+    }
+  },
+  "variables": {
+    "officeConnId": "[resourceId('Microsoft.Web/connections', parameters('Office365ConnectionName'))]",
+    "sentinelConnId": "[resourceId('Microsoft.Web/connections', parameters('SentinelConnectionName'))]",
+    "officeApi": "[concat('/subscriptions/', subscription().subscriptionId, '/providers/Microsoft.Web/locations/', parameters('Location'), '/managedApis/office365')]",
+    "sentinelApi": "[concat('/subscriptions/', subscription().subscriptionId, '/providers/Microsoft.Web/locations/', parameters('Location'), '/managedApis/azuresentinel')]"
+  },
+  "resources": [
+    {
+      "type": "Microsoft.Logic/workflows",
+      "apiVersion": "2019-05-01",
+      "name": "[parameters('PlaybookName')]",
+      "location": "[parameters('Location')]",
+      "identity": {
+        "type": "SystemAssigned"
+      },
+      "properties": {
+        "state": "Enabled",
+        "definition": {
+          "$schema": "https://schema.management.azure.com/providers/Microsoft.Logic/schemas/2016-06-01/workflowdefinition.json#",
+          "contentVersion": "1.0.0.0",
+          "parameters": {
+            "$connections": {
+              "type": "Object",
+              "defaultValue": {}
+            },
+            "SocFromAddress": {
+              "type": "String",
+              "defaultValue": "[parameters('SocFromAddress')]"
+            }
+          },
+          "triggers": {
+            "Microsoft_Sentinel_incident_trigger": {
+              "type": "ApiConnectionWebhook",
+              "inputs": {
+                "host": {
+                  "connection": {
+                    "name": "@parameters('$connections')['azuresentinel']['connectionId']"
+                  }
+                },
+                "body": {
+                  "callback_url": "@listCallbackUrl()"
+                },
+                "path": "/incident-creation"
+              }
+            }
+          },
+          "actions": {
+            "Initialize_Reporters": {
+              "type": "InitializeVariable",
+              "runAfter": {},
+              "inputs": {
+                "variables": [
+                  {
+                    "name": "Reporters",
+                    "type": "Array",
+                    "value": "@triggerBody()?['object']?['properties']?['relatedEntities']"
+                  }
+                ]
+              }
+            },
+            "Filter_to_Account_entities": {
+              "type": "Query",
+              "runAfter": {
+                "Initialize_Reporters": [ "Succeeded" ]
+              },
+              "inputs": {
+                "from": "@variables('Reporters')",
+                "where": "@equals(toLower(item()?['kind']), 'account')"
+              }
+            },
+            "Has_at_least_one_reporter": {
+              "type": "If",
+              "runAfter": {
+                "Filter_to_Account_entities": [ "Succeeded" ]
+              },
+              "expression": {
+                "and": [
+                  {
+                    "greater": [ "@length(body('Filter_to_Account_entities'))", 0 ]
+                  }
+                ]
+              },
+              "actions": {
+                "For_each_reporter": {
+                  "type": "Foreach",
+                  "foreach": "@body('Filter_to_Account_entities')",
+                  "actions": {
+                    "Send_thanks_email": {
+                      "type": "ApiConnection",
+                      "inputs": {
+                        "host": {
+                          "connection": {
+                            "name": "@parameters('$connections')['office365']['connectionId']"
+                          }
+                        },
+                        "method": "post",
+                        "path": "/v2/Mail",
+                        "body": {
+                          "From": "@parameters('SocFromAddress')",
+                          "To": "@coalesce(item()?['properties']?['upnSuffix'] != null ? concat(item()?['properties']?['accountName'], '@', item()?['properties']?['upnSuffix']) : item()?['properties']?['friendlyName'], item()?['properties']?['friendlyName'])",
+                          "Subject": "Thanks for reporting that email",
+                          "Body": "<p>Hello,</p><p>We received your phishing report. Our security team is investigating now; you will receive a follow-up email with the verdict shortly.</p><p>Thank you for helping keep the organisation safe.</p><p>— SOC</p>",
+                          "Importance": "Normal"
+                        }
+                      }
+                    }
+                  }
+                },
+                "Add_incident_task": {
+                  "type": "ApiConnection",
+                  "runAfter": {
+                    "For_each_reporter": [ "Succeeded" ]
+                  },
+                  "inputs": {
+                    "host": {
+                      "connection": {
+                        "name": "@parameters('$connections')['azuresentinel']['connectionId']"
+                      }
+                    },
+                    "method": "post",
+                    "path": "/Incidents/Comment",
+                    "body": {
+                      "incidentArmId": "@triggerBody()?['object']?['id']",
+                      "message": "Reporter Thanks Bridge fired at @{utcNow()}. Acknowledged @{length(body('Filter_to_Account_entities'))} reporter(s)."
+                    }
+                  }
+                }
+              },
+              "else": {
+                "actions": {
+                  "Log_no_reporter": {
+                    "type": "ApiConnection",
+                    "inputs": {
+                      "host": {
+                        "connection": {
+                          "name": "@parameters('$connections')['azuresentinel']['connectionId']"
+                        }
+                      },
+                      "method": "post",
+                      "path": "/Incidents/Comment",
+                      "body": {
+                        "incidentArmId": "@triggerBody()?['object']?['id']",
+                        "message": "P3 fired but no Account entity present on incident; no reporter acknowledged."
+                      }
+                    }
+                  }
+                }
+              }
+            }
+          },
+          "outputs": {}
+        },
+        "parameters": {
+          "$connections": {
+            "value": {
+              "azuresentinel": {
+                "connectionId": "[variables('sentinelConnId')]",
+                "connectionName": "[parameters('SentinelConnectionName')]",
+                "id": "[variables('sentinelApi')]"
+              },
+              "office365": {
+                "connectionId": "[variables('officeConnId')]",
+                "connectionName": "[parameters('Office365ConnectionName')]",
+                "id": "[variables('officeApi')]"
+              }
+            }
+          }
+        }
+      }
+    }
+  ],
+  "outputs": {
+    "playbookName": {
+      "type": "string",
+      "value": "[parameters('PlaybookName')]"
+    },
+    "managedIdentityPrincipalId": {
+      "type": "string",
+      "value": "[reference(resourceId('Microsoft.Logic/workflows', parameters('PlaybookName')), '2019-05-01', 'Full').identity.principalId]"
+    }
+  }
+}

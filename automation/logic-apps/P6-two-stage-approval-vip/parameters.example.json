@@ -1,0 +1,14 @@
+{
+  "$schema": "https://schema.management.azure.com/schemas/2019-04-01/deploymentParameters.json#",
+  "contentVersion": "1.0.0.0",
+  "parameters": {
+    "PlaybookName":           { "value": "trap-mdo-P6-two-stage-approval-vip" },
+    "SentinelConnectionName": { "value": "azuresentinel" },
+    "TeamsConnectionName":    { "value": "teams" },
+    "SocL1TeamId":            { "value": "<soc-l1-team-id-guid>" },
+    "SocL1ChannelId":         { "value": "<soc-l1-channel-id>" },
+    "SocManagerTeamId":       { "value": "<soc-manager-team-id-guid>" },
+    "SocManagerChannelId":    { "value": "<soc-manager-channel-id>" },
+    "Location":               { "value": "uksouth" }
+  }
+}

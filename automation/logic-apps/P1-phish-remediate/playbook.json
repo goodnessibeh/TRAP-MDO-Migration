@@ -1,0 +1,240 @@
+{
+  "$schema": "https://schema.management.azure.com/schemas/2019-04-01/deploymentTemplate.json#",
+  "contentVersion": "1.0.0.0",
+  "metadata": {
+    "title": "P1 - Phish-Remediate (workhorse)",
+    "description": "Incident-triggered playbook that handles user-reported or auto-detected phish end-to-end: extracts MailMessage entities, checks each recipient against a VIP watchlist, posts an approval to Teams, and on approval calls Defender XDR Take Action with SoftDelete. Conservative defaults: single-stage approval, soft-delete only (never hard-delete from this playbook), VIP detection via Sentinel watchlist VIP_Mailboxes, escalates to P6 when VIP is touched. Documented in 10-logic-apps-playbook-library.md P1.",
+    "prerequisites": "Sentinel workspace; Sentinel watchlist named 'VIP_Mailboxes' (alias is the SMTP address column); Defender XDR Take Action API access for the Logic App MI; Teams API connection; optional: P6 deployed if VIP routing is required.",
+    "lastUpdate": "2026-05-20",
+    "entities": ["MailMessage", "Account"],
+    "tags": ["TRAP-MDO-Migration", "Phase-3", "P1", "Workhorse", "Take-Action"]
+  },
+  "parameters": {
+    "PlaybookName":           { "type": "string", "defaultValue": "trap-mdo-P1-phish-remediate" },
+    "SentinelConnectionName": { "type": "string", "defaultValue": "azuresentinel" },
+    "TeamsConnectionName":    { "type": "string", "defaultValue": "teams" },
+    "WorkspaceResourceId":    { "type": "string" },
+    "SocTeamId":              { "type": "string" },
+    "SocChannelId":           { "type": "string" },
+    "VipWatchlistAlias":      { "type": "string", "defaultValue": "VIP_Mailboxes",
+                                "metadata": { "description": "Sentinel watchlist whose entries are VIP recipient SMTP addresses." } },
+    "VipEscalationPlaybook":  { "type": "string", "defaultValue": "",
+                                "metadata": { "description": "Optional. Resource ID of P6 (two-stage approval). If set, VIP-touching incidents route through P6 instead of the single-stage approval." } },
+    "Location":               { "type": "string", "defaultValue": "[resourceGroup().location]" }
+  },
+  "variables": {
+    "sentinelConnId": "[resourceId('Microsoft.Web/connections', parameters('SentinelConnectionName'))]",
+    "teamsConnId":    "[resourceId('Microsoft.Web/connections', parameters('TeamsConnectionName'))]",
+    "sentinelApi":    "[concat('/subscriptions/', subscription().subscriptionId, '/providers/Microsoft.Web/locations/', parameters('Location'), '/managedApis/azuresentinel')]",
+    "teamsApi":       "[concat('/subscriptions/', subscription().subscriptionId, '/providers/Microsoft.Web/locations/', parameters('Location'), '/managedApis/teams')]"
+  },
+  "resources": [
+    {
+      "type": "Microsoft.Logic/workflows",
+      "apiVersion": "2019-05-01",
+      "name": "[parameters('PlaybookName')]",
+      "location": "[parameters('Location')]",
+      "identity": { "type": "SystemAssigned" },
+      "properties": {
+        "state": "Enabled",
+        "definition": {
+          "$schema": "https://schema.management.azure.com/providers/Microsoft.Logic/schemas/2016-06-01/workflowdefinition.json#",
+          "contentVersion": "1.0.0.0",
+          "parameters": {
+            "$connections":         { "type": "Object", "defaultValue": {} },
+            "WorkspaceResourceId":  { "type": "String", "defaultValue": "[parameters('WorkspaceResourceId')]" },
+            "SocTeamId":            { "type": "String", "defaultValue": "[parameters('SocTeamId')]" },
+            "SocChannelId":         { "type": "String", "defaultValue": "[parameters('SocChannelId')]" },
+            "VipWatchlistAlias":    { "type": "String", "defaultValue": "[parameters('VipWatchlistAlias')]" },
+            "VipEscalationPlaybook":{ "type": "String", "defaultValue": "[parameters('VipEscalationPlaybook')]" }
+          },
+          "triggers": {
+            "Microsoft_Sentinel_incident_trigger": {
+              "type": "ApiConnectionWebhook",
+              "inputs": {
+                "host": { "connection": { "name": "@parameters('$connections')['azuresentinel']['connectionId']" } },
+                "body": { "callback_url": "@listCallbackUrl()" },
+                "path": "/incident-creation"
+              }
+            }
+          },
+          "actions": {
+            "Filter_MailMessage_entities": {
+              "type": "Query",
+              "runAfter": {},
+              "inputs": {
+                "from": "@triggerBody()?['object']?['properties']?['relatedEntities']",
+                "where": "@equals(toLower(item()?['kind']), 'mailmessage')"
+              }
+            },
+            "Bail_if_no_mail_entity": {
+              "type": "If",
+              "runAfter": { "Filter_MailMessage_entities": [ "Succeeded" ] },
+              "expression": { "and": [ { "equals": [ "@length(body('Filter_MailMessage_entities'))", 0 ] } ] },
+              "actions": {
+                "Comment_no_mail_entity": {
+                  "type": "ApiConnection",
+                  "inputs": {
+                    "host": { "connection": { "name": "@parameters('$connections')['azuresentinel']['connectionId']" } },
+                    "method": "post",
+                    "path": "/Incidents/Comment",
+                    "body": {
+                      "incidentArmId": "@triggerBody()?['object']?['id']",
+                      "message": "P1 fired but incident has no MailMessage entity — nothing to remediate."
+                    }
+                  }
+                },
+                "Terminate_no_entity": {
+                  "type": "Terminate",
+                  "runAfter": { "Comment_no_mail_entity": [ "Succeeded" ] },
+                  "inputs": { "runStatus": "Cancelled", "runError": { "code": "NoMailEntity", "message": "No MailMessage entity on incident." } }
+                }
+              },
+              "else": { "actions": {} }
+            },
+            "Query_VIP_watchlist": {
+              "type": "ApiConnection",
+              "runAfter": { "Bail_if_no_mail_entity": [ "Succeeded" ] },
+              "inputs": {
+                "host": { "connection": { "name": "@parameters('$connections')['azuresentinel']['connectionId']" } },
+                "method": "post",
+                "path": "/Queries",
+                "body": {
+                  "workspaceResourceId": "@parameters('WorkspaceResourceId')",
+                  "query": "_GetWatchlist('@{parameters('VipWatchlistAlias')}') | project SearchKey",
+                  "timespan": "P7D"
+                }
+              }
+            },
+            "Compute_VIP_intersection": {
+              "type": "Compose",
+              "runAfter": { "Query_VIP_watchlist": [ "Succeeded", "Failed" ] },
+              "inputs": {
+                "vipList":   "@if(equals(outputs('Query_VIP_watchlist')?['statusCode'], 200), body('Query_VIP_watchlist')?['tables']?[0]?['rows'], json('[]'))",
+                "recipients": "@body('Filter_MailMessage_entities')",
+                "vipTouched": "@greater(length(intersection(json(concat('[', join(select(if(equals(outputs('Query_VIP_watchlist')?['statusCode'], 200), body('Query_VIP_watchlist')?['tables']?[0]?['rows'], json('[]')), '\"', item()[0], '\"'), ','), ']')), select(body('Filter_MailMessage_entities'), toLower(item()?['properties']?['recipient'])))), 0)"
+              }
+            },
+            "Route_VIP_or_standard": {
+              "type": "Switch",
+              "runAfter": { "Compute_VIP_intersection": [ "Succeeded" ] },
+              "expression": "@if(empty(parameters('VipEscalationPlaybook')), 'standard', if(outputs('Compute_VIP_intersection').vipTouched, 'vip', 'standard'))",
+              "cases": {
+                "vip": {
+                  "case": "vip",
+                  "actions": {
+                    "Call_P6_two_stage_approval": {
+                      "type": "Http",
+                      "inputs": {
+                        "method": "POST",
+                        "uri": "@parameters('VipEscalationPlaybook')",
+                        "headers": { "Content-Type": "application/json" },
+                        "authentication": { "type": "ManagedServiceIdentity", "audience": "https://management.azure.com/" },
+                        "body": {
+                          "incidentArmId": "@triggerBody()?['object']?['id']",
+                          "mailEntities":  "@body('Filter_MailMessage_entities')",
+                          "vipTouched":    true
+                        }
+                      }
+                    }
+                  }
+                }
+              },
+              "default": {
+                "actions": {
+                  "Post_standard_approval_card": {
+                    "type": "ApiConnectionWebhook",
+                    "inputs": {
+                      "host": { "connection": { "name": "@parameters('$connections')['teams']['connectionId']" } },
+                      "body": {
+                        "notificationUrl": "@listCallbackUrl()",
+                        "messageBody": "P1 remediation request: incident @{triggerBody()?['object']?['properties']?['incidentNumber']} — @{length(body('Filter_MailMessage_entities'))} MailMessage entit(ies). Approve to soft-delete tenant-wide via Defender XDR Take Action.",
+                        "updateMessage": "Decision recorded.",
+                        "options": "Approve,Reject",
+                        "recipient": {
+                          "channelId": "@parameters('SocChannelId')",
+                          "teamId": "@parameters('SocTeamId')"
+                        }
+                      },
+                      "path": "/flowbot/actions/teamsapproval/$subscriptions"
+                    }
+                  },
+                  "Handle_standard_approval_outcome": {
+                    "type": "If",
+                    "runAfter": { "Post_standard_approval_card": [ "Succeeded" ] },
+                    "expression": { "and": [ { "equals": [ "@body('Post_standard_approval_card')?['selectedOption']", "Approve" ] } ] },
+                    "actions": {
+                      "For_each_mail_entity": {
+                        "type": "Foreach",
+                        "foreach": "@body('Filter_MailMessage_entities')",
+                        "actions": {
+                          "Call_TakeAction_softdelete": {
+                            "type": "Http",
+                            "inputs": {
+                              "method": "POST",
+                              "uri": "https://api.security.microsoft.com/api/messages/takeAction",
+                              "headers": { "Content-Type": "application/json" },
+                              "authentication": { "type": "ManagedServiceIdentity", "audience": "https://api.security.microsoft.com" },
+                              "body": {
+                                "NetworkMessageIds": [ "@items('For_each_mail_entity')?['properties']?['networkMessageId']" ],
+                                "ActionType": "SoftDelete",
+                                "Justification": "P1 SOC-approved remediation for Sentinel incident @{triggerBody()?['object']?['properties']?['incidentNumber']}"
+                              }
+                            },
+                            "runtimeConfiguration": { "concurrency": { "repetitions": 5 } }
+                          }
+                        }
+                      },
+                      "Comment_remediated": {
+                        "type": "ApiConnection",
+                        "runAfter": { "For_each_mail_entity": [ "Succeeded" ] },
+                        "inputs": {
+                          "host": { "connection": { "name": "@parameters('$connections')['azuresentinel']['connectionId']" } },
+                          "method": "post",
+                          "path": "/Incidents/Comment",
+                          "body": {
+                            "incidentArmId": "@triggerBody()?['object']?['id']",
+                            "message": "P1 remediation complete: @{length(body('Filter_MailMessage_entities'))} message(s) soft-deleted at @{utcNow()}."
+                          }
+                        }
+                      }
+                    },
+                    "else": {
+                      "actions": {
+                        "Comment_rejected": {
+                          "type": "ApiConnection",
+                          "inputs": {
+                            "host": { "connection": { "name": "@parameters('$connections')['azuresentinel']['connectionId']" } },
+                            "method": "post",
+                            "path": "/Incidents/Comment",
+                            "body": {
+                              "incidentArmId": "@triggerBody()?['object']?['id']",
+                              "message": "P1 remediation rejected at @{utcNow()}. No action taken."
+                            }
+                          }
+                        }
+                      }
+                    }
+                  }
+                }
+              }
+            }
+          },
+          "outputs": {}
+        },
+        "parameters": {
+          "$connections": {
+            "value": {
+              "azuresentinel": { "connectionId": "[variables('sentinelConnId')]", "connectionName": "[parameters('SentinelConnectionName')]", "id": "[variables('sentinelApi')]" },
+              "teams":         { "connectionId": "[variables('teamsConnId')]",    "connectionName": "[parameters('TeamsConnectionName')]",   "id": "[variables('teamsApi')]" }
+            }
+          }
+        }
+      }
+    }
+  ],
+  "outputs": {
+    "playbookName": { "type": "string", "value": "[parameters('PlaybookName')]" },
+    "managedIdentityPrincipalId": { "type": "string", "value": "[reference(resourceId('Microsoft.Logic/workflows', parameters('PlaybookName')), '2019-05-01', 'Full').identity.principalId]" }
+  }
+}

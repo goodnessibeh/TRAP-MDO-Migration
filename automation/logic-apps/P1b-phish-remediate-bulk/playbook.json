@@ -1,0 +1,144 @@
+{
+  "$schema": "https://schema.management.azure.com/schemas/2019-04-01/deploymentTemplate.json#",
+  "contentVersion": "1.0.0.0",
+  "metadata": {
+    "title": "P1b - Phish-Remediate-Bulk (pagination helper)",
+    "description": "HTTP-triggered helper called by P1 (or any other playbook) when the NetworkMessageId set is larger than the Defender XDR rate limit can absorb in one shot. Chunks the input array into pages of 50 and calls api/messages/takeAction per page with a 12-second inter-page delay to stay under the 300/min cap. Returns per-page status. Documented in 10-logic-apps-playbook-library.md P1b.",
+    "prerequisites": "Defender XDR Take Action API access for the Logic App MI; HTTP-callable from P1.",
+    "lastUpdate": "2026-05-20",
+    "entities": [],
+    "tags": ["TRAP-MDO-Migration", "Phase-3", "P1b", "Paginator"]
+  },
+  "parameters": {
+    "PlaybookName": { "type": "string", "defaultValue": "trap-mdo-P1b-phish-remediate-bulk" },
+    "ChunkSize":    { "type": "int",    "defaultValue": 50,  "metadata": { "description": "Max NetworkMessageIds per Take Action call. 50 is the Defender API recommendation." } },
+    "DelaySeconds": { "type": "int",    "defaultValue": 12,  "metadata": { "description": "Wait between chunks. With chunk=50 and delay=12s, throughput is ~250/min, under the 300/min ceiling." } },
+    "Location":     { "type": "string", "defaultValue": "[resourceGroup().location]" }
+  },
+  "variables": {},
+  "resources": [
+    {
+      "type": "Microsoft.Logic/workflows",
+      "apiVersion": "2019-05-01",
+      "name": "[parameters('PlaybookName')]",
+      "location": "[parameters('Location')]",
+      "identity": { "type": "SystemAssigned" },
+      "properties": {
+        "state": "Enabled",
+        "definition": {
+          "$schema": "https://schema.management.azure.com/providers/Microsoft.Logic/schemas/2016-06-01/workflowdefinition.json#",
+          "contentVersion": "1.0.0.0",
+          "parameters": {
+            "$connections": { "type": "Object", "defaultValue": {} },
+            "ChunkSize":    { "type": "Int", "defaultValue": "[parameters('ChunkSize')]" },
+            "DelaySeconds": { "type": "Int", "defaultValue": "[parameters('DelaySeconds')]" }
+          },
+          "triggers": {
+            "manual": {
+              "type": "Request",
+              "kind": "Http",
+              "inputs": {
+                "method": "POST",
+                "schema": {
+                  "type": "object",
+                  "required": [ "networkMessageIds" ],
+                  "properties": {
+                    "networkMessageIds": { "type": "array", "items": { "type": "string" } },
+                    "actionType":        { "type": "string", "enum": [ "SoftDelete", "MoveToInbox", "MoveToJunk", "MoveToDeletedItems" ], "default": "SoftDelete" },
+                    "justification":     { "type": "string" }
+                  }
+                }
+              }
+            }
+          },
+          "actions": {
+            "Initialize_Index": {
+              "type": "InitializeVariable",
+              "runAfter": {},
+              "inputs": { "variables": [ { "name": "ChunkStart", "type": "Integer", "value": 0 } ] }
+            },
+            "Initialize_Total": {
+              "type": "InitializeVariable",
+              "runAfter": { "Initialize_Index": [ "Succeeded" ] },
+              "inputs": { "variables": [ { "name": "TotalIds", "type": "Integer", "value": "@length(triggerBody()?['networkMessageIds'])" } ] }
+            },
+            "Initialize_Results": {
+              "type": "InitializeVariable",
+              "runAfter": { "Initialize_Total": [ "Succeeded" ] },
+              "inputs": { "variables": [ { "name": "PageResults", "type": "Array", "value": [] } ] }
+            },
+            "Process_chunks": {
+              "type": "Until",
+              "runAfter": { "Initialize_Results": [ "Succeeded" ] },
+              "expression": "@greaterOrEquals(variables('ChunkStart'), variables('TotalIds'))",
+              "limit": { "count": 500, "timeout": "PT4H" },
+              "actions": {
+                "Slice_chunk": {
+                  "type": "Compose",
+                  "inputs": "@take(skip(triggerBody()?['networkMessageIds'], variables('ChunkStart')), parameters('ChunkSize'))"
+                },
+                "Call_TakeAction": {
+                  "type": "Http",
+                  "runAfter": { "Slice_chunk": [ "Succeeded" ] },
+                  "inputs": {
+                    "method": "POST",
+                    "uri": "https://api.security.microsoft.com/api/messages/takeAction",
+                    "headers": { "Content-Type": "application/json" },
+                    "authentication": { "type": "ManagedServiceIdentity", "audience": "https://api.security.microsoft.com" },
+                    "body": {
+                      "NetworkMessageIds": "@outputs('Slice_chunk')",
+                      "ActionType":        "@coalesce(triggerBody()?['actionType'], 'SoftDelete')",
+                      "Justification":     "@coalesce(triggerBody()?['justification'], 'P1b bulk remediation')"
+                    }
+                  }
+                },
+                "Append_result": {
+                  "type": "AppendToArrayVariable",
+                  "runAfter": { "Call_TakeAction": [ "Succeeded", "Failed" ] },
+                  "inputs": {
+                    "name": "PageResults",
+                    "value": {
+                      "chunkStart": "@variables('ChunkStart')",
+                      "chunkSize":  "@length(outputs('Slice_chunk'))",
+                      "status":     "@outputs('Call_TakeAction')?['statusCode']"
+                    }
+                  }
+                },
+                "Advance_index": {
+                  "type": "IncrementVariable",
+                  "runAfter": { "Append_result": [ "Succeeded" ] },
+                  "inputs": { "name": "ChunkStart", "value": "@parameters('ChunkSize')" }
+                },
+                "Delay_between_chunks": {
+                  "type": "Wait",
+                  "runAfter": { "Advance_index": [ "Succeeded" ] },
+                  "inputs": { "interval": { "count": "@parameters('DelaySeconds')", "unit": "Second" } }
+                }
+              }
+            },
+            "Respond_with_results": {
+              "type": "Response",
+              "runAfter": { "Process_chunks": [ "Succeeded", "Failed", "TimedOut" ] },
+              "inputs": {
+                "statusCode": 200,
+                "body": {
+                  "totalProcessed": "@variables('TotalIds')",
+                  "chunks":         "@variables('PageResults')"
+                }
+              }
+            }
+          },
+          "outputs": {}
+        },
+        "parameters": {
+          "$connections": { "value": {} }
+        }
+      }
+    }
+  ],
+  "outputs": {
+    "playbookName":              { "type": "string", "value": "[parameters('PlaybookName')]" },
+    "callbackUrl":                { "type": "string", "value": "[listCallbackURL(concat(resourceId('Microsoft.Logic/workflows', parameters('PlaybookName')), '/triggers/manual'), '2019-05-01').value]" },
+    "managedIdentityPrincipalId": { "type": "string", "value": "[reference(resourceId('Microsoft.Logic/workflows', parameters('PlaybookName')), '2019-05-01', 'Full').identity.principalId]" }
+  }
+}

@@ -1,0 +1,15 @@
+{
+  "$schema": "https://schema.management.azure.com/schemas/2019-04-01/deploymentParameters.json#",
+  "contentVersion": "1.0.0.0",
+  "parameters": {
+    "PlaybookName":           { "value": "trap-mdo-P2-ti-sweep-remediate" },
+    "SentinelConnectionName": { "value": "azuresentinel" },
+    "TeamsConnectionName":    { "value": "teams" },
+    "WorkspaceResourceId":    { "value": "/subscriptions/<sub-id>/resourceGroups/<rg>/providers/Microsoft.OperationalInsights/workspaces/<workspace-name>" },
+    "SocTeamId":              { "value": "<teams-team-id-guid>" },
+    "SocChannelId":           { "value": "<teams-channel-id>" },
+    "TenantId":               { "value": "<entra-tenant-id-guid>" },
+    "LookbackDays":           { "value": 14 },
+    "Location":               { "value": "uksouth" }
+  }
+}

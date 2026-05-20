@@ -1,0 +1,179 @@
+{
+  "$schema": "https://schema.management.azure.com/schemas/2019-04-01/deploymentTemplate.json#",
+  "contentVersion": "1.0.0.0",
+  "metadata": {
+    "title": "P4 - Forward Trace Remediate",
+    "description": "Given a malicious NetworkMessageId, walk every internal forward of that message via EmailEvents and Get-MessageTraceV2, then remediate each internal copy via Defender XDR Take Action. Surfaces external forwards as a Teams alert (cannot remediate; out of tenant scope). Closes the forward-following gap that TRAP filled natively. Documented in 09-kql-detection-library.md Q4 and 10-logic-apps-playbook-library.md P4.",
+    "prerequisites": "Sentinel workspace + EmailEvents stream; Defender XDR Take Action API access for the Logic App MI; Teams Posts connection for external-forward notifications.",
+    "lastUpdate": "2026-05-20",
+    "entities": ["MailMessage"],
+    "tags": ["TRAP-MDO-Migration", "Phase-3", "P4", "Forward-Following", "Take-Action"]
+  },
+  "parameters": {
+    "PlaybookName":           { "type": "string", "defaultValue": "trap-mdo-P4-forward-trace-remediate" },
+    "SentinelConnectionName": { "type": "string", "defaultValue": "azuresentinel" },
+    "TeamsConnectionName":    { "type": "string", "defaultValue": "teams" },
+    "WorkspaceResourceId":    { "type": "string" },
+    "SocTeamId":              { "type": "string" },
+    "SocChannelId":           { "type": "string" },
+    "Location":               { "type": "string", "defaultValue": "[resourceGroup().location]" }
+  },
+  "variables": {
+    "sentinelConnId": "[resourceId('Microsoft.Web/connections', parameters('SentinelConnectionName'))]",
+    "teamsConnId":    "[resourceId('Microsoft.Web/connections', parameters('TeamsConnectionName'))]",
+    "sentinelApi":    "[concat('/subscriptions/', subscription().subscriptionId, '/providers/Microsoft.Web/locations/', parameters('Location'), '/managedApis/azuresentinel')]",
+    "teamsApi":       "[concat('/subscriptions/', subscription().subscriptionId, '/providers/Microsoft.Web/locations/', parameters('Location'), '/managedApis/teams')]"
+  },
+  "resources": [
+    {
+      "type": "Microsoft.Logic/workflows",
+      "apiVersion": "2019-05-01",
+      "name": "[parameters('PlaybookName')]",
+      "location": "[parameters('Location')]",
+      "identity": { "type": "SystemAssigned" },
+      "properties": {
+        "state": "Enabled",
+        "definition": {
+          "$schema": "https://schema.management.azure.com/providers/Microsoft.Logic/schemas/2016-06-01/workflowdefinition.json#",
+          "contentVersion": "1.0.0.0",
+          "parameters": {
+            "$connections":        { "type": "Object", "defaultValue": {} },
+            "WorkspaceResourceId": { "type": "String", "defaultValue": "[parameters('WorkspaceResourceId')]" },
+            "SocTeamId":           { "type": "String", "defaultValue": "[parameters('SocTeamId')]" },
+            "SocChannelId":        { "type": "String", "defaultValue": "[parameters('SocChannelId')]" }
+          },
+          "triggers": {
+            "Microsoft_Sentinel_alert_trigger": {
+              "type": "ApiConnectionWebhook",
+              "inputs": {
+                "host": { "connection": { "name": "@parameters('$connections')['azuresentinel']['connectionId']" } },
+                "body": { "callback_url": "@listCallbackUrl()" },
+                "path": "/entity/MailMessage"
+              }
+            }
+          },
+          "actions": {
+            "Extract_NetworkMessageId": {
+              "type": "Compose",
+              "runAfter": {},
+              "inputs": "@triggerBody()?['Entity']?['properties']?['networkMessageId']"
+            },
+            "Bail_if_no_NetworkMessageId": {
+              "type": "If",
+              "runAfter": { "Extract_NetworkMessageId": [ "Succeeded" ] },
+              "expression": { "and": [ { "equals": [ "@outputs('Extract_NetworkMessageId')", null ] } ] },
+              "actions": {
+                "Terminate_no_input": {
+                  "type": "Terminate",
+                  "inputs": { "runStatus": "Cancelled", "runError": { "code": "NoEntity", "message": "Triggered with no MailMessage.NetworkMessageId — nothing to trace." } }
+                }
+              },
+              "else": { "actions": {} }
+            },
+            "Run_internal_forward_query": {
+              "type": "ApiConnection",
+              "runAfter": { "Bail_if_no_NetworkMessageId": [ "Succeeded" ] },
+              "inputs": {
+                "host": { "connection": { "name": "@parameters('$connections')['azuresentinel']['connectionId']" } },
+                "method": "post",
+                "path": "/Queries",
+                "body": {
+                  "workspaceResourceId": "@parameters('WorkspaceResourceId')",
+                  "query": "let target = '@{outputs('Extract_NetworkMessageId')}';\nlet orig = EmailEvents | where NetworkMessageId == target | top 1 by TimeGenerated;\nlet origSubject = toscalar(orig | project Subject);\nlet origSender  = toscalar(orig | project SenderFromAddress);\nEmailEvents\n| where TimeGenerated > ago(14d)\n| where EmailDirection in ('Intraorg','Inbound')\n| where Subject =~ origSubject and SenderFromAddress =~ origSender\n| where NetworkMessageId != target\n| project Timestamp, NetworkMessageId, RecipientEmailAddress, SenderFromAddress, Subject, EmailDirection, DeliveryAction",
+                  "timespan": "P14D"
+                }
+              }
+            },
+            "Split_internal_vs_external": {
+              "type": "Compose",
+              "runAfter": { "Run_internal_forward_query": [ "Succeeded" ] },
+              "inputs": {
+                "all":      "@body('Run_internal_forward_query')?['tables']?[0]?['rows']",
+                "internal": "@filter(body('Run_internal_forward_query')?['tables']?[0]?['rows'], equals(item()[5], 'Intraorg'))",
+                "external": "@filter(body('Run_internal_forward_query')?['tables']?[0]?['rows'], equals(item()[5], 'Inbound'))"
+              }
+            },
+            "Remediate_internal_copies": {
+              "type": "If",
+              "runAfter": { "Split_internal_vs_external": [ "Succeeded" ] },
+              "expression": { "and": [ { "greater": [ "@length(outputs('Split_internal_vs_external').internal)", 0 ] } ] },
+              "actions": {
+                "For_each_internal": {
+                  "type": "Foreach",
+                  "foreach": "@outputs('Split_internal_vs_external').internal",
+                  "actions": {
+                    "Call_TakeAction_softdelete": {
+                      "type": "Http",
+                      "inputs": {
+                        "method": "POST",
+                        "uri": "https://api.security.microsoft.com/api/messages/takeAction",
+                        "headers": { "Content-Type": "application/json" },
+                        "authentication": { "type": "ManagedServiceIdentity", "audience": "https://api.security.microsoft.com" },
+                        "body": {
+                          "NetworkMessageIds": [ "@item()[1]" ],
+                          "ActionType": "SoftDelete",
+                          "Justification": "P4 forward-trace remediation: same-subject same-sender as malicious @{outputs('Extract_NetworkMessageId')}"
+                        }
+                      },
+                      "runtimeConfiguration": { "concurrency": { "repetitions": 5 } }
+                    }
+                  }
+                }
+              },
+              "else": { "actions": {} }
+            },
+            "Alert_on_external_forwards": {
+              "type": "If",
+              "runAfter": { "Remediate_internal_copies": [ "Succeeded", "Skipped" ] },
+              "expression": { "and": [ { "greater": [ "@length(outputs('Split_internal_vs_external').external)", 0 ] } ] },
+              "actions": {
+                "Post_Teams_external_forward_alert": {
+                  "type": "ApiConnection",
+                  "inputs": {
+                    "host": { "connection": { "name": "@parameters('$connections')['teams']['connectionId']" } },
+                    "method": "post",
+                    "path": "/v3/beta/teams/@{encodeURIComponent(parameters('SocTeamId'))}/channels/@{encodeURIComponent(parameters('SocChannelId'))}/messages",
+                    "body": {
+                      "subject": "External-forward detected — out of tenant scope",
+                      "messageBody": {
+                        "contentType": "html",
+                        "content": "<p><b>P4 Forward Trace</b> detected @{length(outputs('Split_internal_vs_external').external)} external forward(s) of malicious message <code>@{outputs('Extract_NetworkMessageId')}</code>. Cannot remediate externally; recommend block at sender organisation and review auto-forward rules per Q7.</p>"
+                      }
+                    }
+                  }
+                }
+              },
+              "else": { "actions": {} }
+            },
+            "Comment_back_to_incident": {
+              "type": "ApiConnection",
+              "runAfter": { "Alert_on_external_forwards": [ "Succeeded", "Skipped" ] },
+              "inputs": {
+                "host": { "connection": { "name": "@parameters('$connections')['azuresentinel']['connectionId']" } },
+                "method": "post",
+                "path": "/Incidents/Comment",
+                "body": {
+                  "incidentArmId": "@triggerBody()?['IncidentArmID']",
+                  "message": "P4 Forward Trace complete. Internal copies remediated: @{length(outputs('Split_internal_vs_external').internal)}. External forwards (cannot remediate): @{length(outputs('Split_internal_vs_external').external)}."
+                }
+              }
+            }
+          },
+          "outputs": {}
+        },
+        "parameters": {
+          "$connections": {
+            "value": {
+              "azuresentinel": { "connectionId": "[variables('sentinelConnId')]", "connectionName": "[parameters('SentinelConnectionName')]", "id": "[variables('sentinelApi')]" },
+              "teams":         { "connectionId": "[variables('teamsConnId')]",    "connectionName": "[parameters('TeamsConnectionName')]",   "id": "[variables('teamsApi')]" }
+            }
+          }
+        }
+      }
+    }
+  ],
+  "outputs": {
+    "playbookName": { "type": "string", "value": "[parameters('PlaybookName')]" },
+    "managedIdentityPrincipalId": { "type": "string", "value": "[reference(resourceId('Microsoft.Logic/workflows', parameters('PlaybookName')), '2019-05-01', 'Full').identity.principalId]" }
+  }
+}

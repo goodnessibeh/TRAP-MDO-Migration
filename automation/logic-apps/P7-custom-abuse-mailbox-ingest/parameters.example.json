@@ -1,0 +1,11 @@
+{
+  "$schema": "https://schema.management.azure.com/schemas/2019-04-01/deploymentParameters.json#",
+  "contentVersion": "1.0.0.0",
+  "parameters": {
+    "PlaybookName":           { "value": "trap-mdo-P7-custom-abuse-mailbox-ingest" },
+    "Office365ConnectionName": { "value": "office365" },
+    "AbuseMailboxAddress":    { "value": "abuse@<your-tenant>.com" },
+    "ThanksFromAddress":      { "value": "soc@<your-tenant>.com" },
+    "Location":               { "value": "uksouth" }
+  }
+}

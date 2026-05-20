@@ -1,0 +1,266 @@
+{
+  "$schema": "https://schema.management.azure.com/schemas/2019-04-01/deploymentTemplate.json#",
+  "contentVersion": "1.0.0.0",
+  "metadata": {
+    "title": "P2 - TI Sweep Remediate",
+    "description": "Periodically sweeps EmailEvents against a Sentinel threat intelligence watchlist or the Microsoft Defender Threat Intelligence (MDTI) connector, identifying messages older than ZAP's 48h window that should now be remediated based on fresh TI. For matched messages, opens an approval card in Teams and (on approval) calls Defender XDR Take Action to soft-delete. This closes the single biggest TRAP-vs-MDO gap that Phase 2 surfaces. Documented in 09-kql-detection-library.md Q5 and 10-logic-apps-playbook-library.md P2.",
+    "prerequisites": "Sentinel workspace; EmailEvents stream enabled on M365 Defender connector; Defender XDR Take Action permissions (Search and Purge role); Teams Posts API connection for approval card; managed identity granted Microsoft Sentinel Contributor + Microsoft Sentinel Responder on the workspace.",
+    "lastUpdate": "2026-05-20",
+    "entities": ["MailMessage", "Account"],
+    "tags": ["TRAP-MDO-Migration", "Phase-2", "P2", "TI", "Sweep", "Take-Action"]
+  },
+  "parameters": {
+    "PlaybookName": {
+      "type": "string",
+      "defaultValue": "trap-mdo-P2-ti-sweep-remediate"
+    },
+    "SentinelConnectionName": {
+      "type": "string",
+      "defaultValue": "azuresentinel"
+    },
+    "TeamsConnectionName": {
+      "type": "string",
+      "defaultValue": "teams"
+    },
+    "WorkspaceResourceId": {
+      "type": "string",
+      "metadata": {
+        "description": "Full ARM resource id of the Log Analytics workspace backing Sentinel."
+      }
+    },
+    "SocTeamId": {
+      "type": "string",
+      "metadata": {
+        "description": "Microsoft Teams team id where the approval card is posted."
+      }
+    },
+    "SocChannelId": {
+      "type": "string",
+      "metadata": {
+        "description": "Channel id within the SOC team."
+      }
+    },
+    "TenantId": {
+      "type": "string",
+      "metadata": {
+        "description": "Microsoft Entra tenant id (used in the Defender XDR Take Action URL)."
+      }
+    },
+    "LookbackDays": {
+      "type": "int",
+      "defaultValue": 14,
+      "metadata": {
+        "description": "How many days back to sweep when the playbook runs. ZAP covers ~48h, so this is the gap-filling window."
+      }
+    },
+    "Location": {
+      "type": "string",
+      "defaultValue": "[resourceGroup().location]"
+    }
+  },
+  "variables": {
+    "sentinelConnId": "[resourceId('Microsoft.Web/connections', parameters('SentinelConnectionName'))]",
+    "teamsConnId": "[resourceId('Microsoft.Web/connections', parameters('TeamsConnectionName'))]",
+    "sentinelApi": "[concat('/subscriptions/', subscription().subscriptionId, '/providers/Microsoft.Web/locations/', parameters('Location'), '/managedApis/azuresentinel')]",
+    "teamsApi": "[concat('/subscriptions/', subscription().subscriptionId, '/providers/Microsoft.Web/locations/', parameters('Location'), '/managedApis/teams')]"
+  },
+  "resources": [
+    {
+      "type": "Microsoft.Logic/workflows",
+      "apiVersion": "2019-05-01",
+      "name": "[parameters('PlaybookName')]",
+      "location": "[parameters('Location')]",
+      "identity": {
+        "type": "SystemAssigned"
+      },
+      "properties": {
+        "state": "Enabled",
+        "definition": {
+          "$schema": "https://schema.management.azure.com/providers/Microsoft.Logic/schemas/2016-06-01/workflowdefinition.json#",
+          "contentVersion": "1.0.0.0",
+          "parameters": {
+            "$connections": {
+              "type": "Object",
+              "defaultValue": {}
+            },
+            "WorkspaceResourceId": {
+              "type": "String",
+              "defaultValue": "[parameters('WorkspaceResourceId')]"
+            },
+            "SocTeamId": {
+              "type": "String",
+              "defaultValue": "[parameters('SocTeamId')]"
+            },
+            "SocChannelId": {
+              "type": "String",
+              "defaultValue": "[parameters('SocChannelId')]"
+            },
+            "TenantId": {
+              "type": "String",
+              "defaultValue": "[parameters('TenantId')]"
+            },
+            "LookbackDays": {
+              "type": "Int",
+              "defaultValue": "[parameters('LookbackDays')]"
+            }
+          },
+          "triggers": {
+            "Recurrence_hourly": {
+              "type": "Recurrence",
+              "recurrence": {
+                "frequency": "Hour",
+                "interval": 1
+              }
+            }
+          },
+          "actions": {
+            "Run_TI_sweep_query": {
+              "type": "ApiConnection",
+              "runAfter": {},
+              "inputs": {
+                "host": {
+                  "connection": {
+                    "name": "@parameters('$connections')['azuresentinel']['connectionId']"
+                  }
+                },
+                "method": "post",
+                "path": "/Queries",
+                "body": {
+                  "workspaceResourceId": "@parameters('WorkspaceResourceId')",
+                  "query": "let lookback = @{parameters('LookbackDays')}d;\nlet TI = ThreatIntelligenceIndicator\n    | where TimeGenerated > ago(7d)\n    | where Active == true\n    | where isnotempty(NetworkSourceAddress) or isnotempty(Url) or isnotempty(DomainName) or isnotempty(EmailSenderAddress) or isnotempty(FileHashValue)\n    | project SenderIp = NetworkSourceAddress, Url, DomainName, SenderEmail = EmailSenderAddress, Sha256 = FileHashValue, IndicatorType = Type, Description, ConfidenceScore;\nEmailEvents\n| where TimeGenerated > ago(lookback) and TimeGenerated < ago(2d)\n| where EmailDirection == 'Inbound'\n| where DeliveryAction == 'Delivered'\n| join kind=inner (EmailAttachmentInfo | where TimeGenerated > ago(lookback) | project NetworkMessageId, FileType, SHA256) on NetworkMessageId\n| join kind=leftouter (EmailUrlInfo | where TimeGenerated > ago(lookback) | project NetworkMessageId, UrlDomain = parse_url(Url).Host, Url) on NetworkMessageId\n| extend match = case(\n    SenderFromAddress in (TI | project SenderEmail), 'sender',\n    UrlDomain in (TI | project DomainName), 'url-domain',\n    Url in (TI | project Url), 'url-exact',\n    SHA256 in (TI | project Sha256), 'attachment-sha256',\n    SenderIPv4 in (TI | project SenderIp), 'sender-ip',\n    '')\n| where match != ''\n| project Timestamp, NetworkMessageId, RecipientEmailAddress, SenderFromAddress, Subject, match",
+                  "timespan": "P1D"
+                }
+              }
+            },
+            "Were_any_matches_found": {
+              "type": "If",
+              "runAfter": {
+                "Run_TI_sweep_query": [ "Succeeded" ]
+              },
+              "expression": {
+                "and": [
+                  {
+                    "greater": [ "@length(body('Run_TI_sweep_query')?['tables']?[0]?['rows'])", 0 ]
+                  }
+                ]
+              },
+              "actions": {
+                "Compose_summary": {
+                  "type": "Compose",
+                  "inputs": {
+                    "matchCount": "@length(body('Run_TI_sweep_query')?['tables']?[0]?['rows'])",
+                    "rows": "@body('Run_TI_sweep_query')?['tables']?[0]?['rows']"
+                  }
+                },
+                "Post_Teams_approval_card": {
+                  "type": "ApiConnectionWebhook",
+                  "runAfter": {
+                    "Compose_summary": [ "Succeeded" ]
+                  },
+                  "inputs": {
+                    "host": {
+                      "connection": {
+                        "name": "@parameters('$connections')['teams']['connectionId']"
+                      }
+                    },
+                    "body": {
+                      "notificationUrl": "@listCallbackUrl()",
+                      "messageBody": "@{outputs('Compose_summary').matchCount} TI sweep match(es) found in EmailEvents (lookback @{parameters('LookbackDays')}d). Approve to soft-delete the matched messages tenant-wide via Defender XDR Take Action.",
+                      "updateMessage": "Decision recorded.",
+                      "options": "Approve,Reject",
+                      "recipient": {
+                        "channelId": "@parameters('SocChannelId')",
+                        "teamId": "@parameters('SocTeamId')"
+                      }
+                    },
+                    "path": "/flowbot/actions/teamsapproval/$subscriptions"
+                  }
+                },
+                "On_approval_branch": {
+                  "type": "If",
+                  "runAfter": {
+                    "Post_Teams_approval_card": [ "Succeeded" ]
+                  },
+                  "expression": {
+                    "and": [
+                      {
+                        "equals": [ "@body('Post_Teams_approval_card')?['selectedOption']", "Approve" ]
+                      }
+                    ]
+                  },
+                  "actions": {
+                    "For_each_matched_message": {
+                      "type": "Foreach",
+                      "foreach": "@body('Run_TI_sweep_query')?['tables']?[0]?['rows']",
+                      "actions": {
+                        "Call_Defender_TakeAction": {
+                          "type": "Http",
+                          "inputs": {
+                            "method": "POST",
+                            "uri": "https://api.security.microsoft.com/api/messages/takeAction",
+                            "headers": {
+                              "Content-Type": "application/json"
+                            },
+                            "authentication": {
+                              "type": "ManagedServiceIdentity",
+                              "audience": "https://api.security.microsoft.com"
+                            },
+                            "body": {
+                              "NetworkMessageIds": [ "@item()[1]" ],
+                              "ActionType": "SoftDelete",
+                              "Justification": "TI sweep auto-remediation. Tenant id: @{parameters('TenantId')}"
+                            }
+                          },
+                          "runtimeConfiguration": {
+                            "concurrency": {
+                              "repetitions": 5
+                            }
+                          }
+                        }
+                      }
+                    }
+                  },
+                  "else": {
+                    "actions": {
+                      "Log_rejection": {
+                        "type": "Compose",
+                        "inputs": "TI sweep rejected by SOC at @{utcNow()}. Match count: @{outputs('Compose_summary').matchCount}."
+                      }
+                    }
+                  }
+                }
+              }
+            }
+          },
+          "outputs": {}
+        },
+        "parameters": {
+          "$connections": {
+            "value": {
+              "azuresentinel": {
+                "connectionId": "[variables('sentinelConnId')]",
+                "connectionName": "[parameters('SentinelConnectionName')]",
+                "id": "[variables('sentinelApi')]"
+              },
+              "teams": {
+                "connectionId": "[variables('teamsConnId')]",
+                "connectionName": "[parameters('TeamsConnectionName')]",
+                "id": "[variables('teamsApi')]"
+              }
+            }
+          }
+        }
+      }
+    }
+  ],
+  "outputs": {
+    "playbookName": {
+      "type": "string",
+      "value": "[parameters('PlaybookName')]"
+    },
+    "managedIdentityPrincipalId": {
+      "type": "string",
+      "value": "[reference(resourceId('Microsoft.Logic/workflows', parameters('PlaybookName')), '2019-05-01', 'Full').identity.principalId]"
+    }
+  }
+}

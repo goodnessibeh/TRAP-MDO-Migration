@@ -216,7 +216,10 @@ Warning. Use `-Fix` for auto-formatter fixes and `-OutputCsv
 | `Untrusted repository` prompt on every install | PSGallery not marked trusted | `Set-PSRepository -Name PSGallery -InstallationPolicy Trusted` |
 | `'Get-ProtectionAlert' is not recognised` while running alert audit | Not connected to Security & Compliance | `Connect-IPPSSession` |
 | `Get-MgUser` returns nothing | Graph connection or scope missing | `Connect-MgGraph -Scopes "User.Read.All","Organization.Read.All"` |
-| `The remote certificate is invalid because of errors in the certificate chain: UntrustedRoot` | Corporate TLS-inspection proxy (e.g. Cloudflare WARP, Zscaler) intercepting PSGallery | Either install the proxy CA into the system trust store, or temporarily disable inspection for this device |
+| `Connect-ExchangeOnline` says "could not acquire token" / browser doesn't open | Headless context (WSL, SSH, container) or broken browser handoff | Use device-code auth: `Connect-ExchangeOnline -Device` — opens nothing, gives you a URL + 8-char code to enter on any browser. Same for `Connect-IPPSSession -Device` and `Connect-MgGraph -UseDeviceCode`. |
+| `Connect-ExchangeOnline` hangs then fails after some time | Conditional Access requires device compliance / MFA refresh | Sign in via the Azure portal first to satisfy any pending MFA challenge, then retry. Or get a CA exclusion for the admin account. |
+| Browser opens but loops back to "Pick an account" | Stale MSAL token cache | `Disconnect-ExchangeOnline -Confirm:$false; Remove-Item ~/.IdentityService -Recurse -Force -ErrorAction SilentlyContinue; Connect-ExchangeOnline -Device` |
+| The remote certificate is invalid because of errors in the certificate chain: `UntrustedRoot` | Corporate TLS-inspection proxy (e.g. Cloudflare WARP, Zscaler) intercepting PSGallery / login endpoints | Install the proxy CA in the system trust store, or pause TLS inspection for this device |
 | Scripts work in `pwsh` but not in ISE | ISE runs PS 5.1 — features in our `#Requires -Version 7.0` are unsupported | Open in VS Code or run `pwsh -File .\Invoke-Mdo*.ps1` |
 | `New-ReportSubmissionPolicy: A parameter cannot be found that matches parameter name 'EnableThirdPartyAddress'` | EXO Management module is older than v3 | `Update-Module ExchangeOnlineManagement -Force` then close and reopen `pwsh` |
 

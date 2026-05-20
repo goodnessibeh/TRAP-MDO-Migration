@@ -1,0 +1,201 @@
+{
+  "version": "Notebook/1.0",
+  "items": [
+    {
+      "type": 1,
+      "content": {
+        "json": "# MDO Operational Dashboard\n\nDaily SOC view of Microsoft Defender for Office 365 health and incident throughput. Use this once the OOTB deployment is live and the Sentinel Defender XDR connector is streaming `EmailEvents`, `EmailPostDeliveryEvents`, `AlertInfo`, and `AlertEvidence`.\n\nReplaces the TRAP daily-shift dashboard."
+      },
+      "name": "title-block"
+    },
+    {
+      "type": 9,
+      "content": {
+        "version": "KqlParameterItem/1.0",
+        "parameters": [
+          {
+            "id": "tr-param",
+            "version": "KqlParameterItem/1.0",
+            "name": "TimeRange",
+            "type": 4,
+            "isRequired": true,
+            "value": { "durationMs": 604800000 },
+            "typeSettings": {
+              "selectableValues": [
+                { "durationMs": 3600000 },
+                { "durationMs": 14400000 },
+                { "durationMs": 43200000 },
+                { "durationMs": 86400000 },
+                { "durationMs": 172800000 },
+                { "durationMs": 604800000 },
+                { "durationMs": 2592000000 }
+              ]
+            }
+          },
+          {
+            "id": "ws-param",
+            "version": "KqlParameterItem/1.0",
+            "name": "Workspace",
+            "type": 5,
+            "isRequired": true,
+            "typeSettings": { "resourceTypeFilter": { "microsoft.operationalinsights/workspaces": true } },
+            "value": null
+          }
+        ],
+        "style": "pills",
+        "queryType": 0,
+        "resourceType": "microsoft.operationalinsights/workspaces"
+      },
+      "name": "parameters"
+    },
+    {
+      "type": 1,
+      "content": {
+        "json": "## Headline counts\n\nHow much MDO is doing for us in the selected window."
+      },
+      "name": "headline-header"
+    },
+    {
+      "type": 3,
+      "content": {
+        "version": "KqlItem/1.0",
+        "query": "EmailEvents\n| where TimeGenerated {TimeRange}\n| where EmailDirection == 'Inbound'\n| summarize\n    TotalInbound      = count(),\n    PhishBlocked      = countif(ThreatTypes has 'Phish'   and DeliveryAction != 'Delivered'),\n    MalwareBlocked    = countif(ThreatTypes has 'Malware' and DeliveryAction != 'Delivered'),\n    PhishDelivered    = countif(ThreatTypes has 'Phish'   and DeliveryAction == 'Delivered'),\n    MalwareDelivered  = countif(ThreatTypes has 'Malware' and DeliveryAction == 'Delivered')\n| project Metric = 'Total Inbound',        Value = TotalInbound\n| union (EmailEvents | where TimeGenerated {TimeRange} | where EmailDirection == 'Inbound' | summarize Value = countif(ThreatTypes has 'Phish'   and DeliveryAction != 'Delivered') | extend Metric = 'Phish Blocked')\n| union (EmailEvents | where TimeGenerated {TimeRange} | where EmailDirection == 'Inbound' | summarize Value = countif(ThreatTypes has 'Malware' and DeliveryAction != 'Delivered') | extend Metric = 'Malware Blocked')\n| union (EmailEvents | where TimeGenerated {TimeRange} | where EmailDirection == 'Inbound' | summarize Value = countif(ThreatTypes has 'Phish'   and DeliveryAction == 'Delivered') | extend Metric = 'Phish Delivered')\n| union (EmailEvents | where TimeGenerated {TimeRange} | where EmailDirection == 'Inbound' | summarize Value = countif(ThreatTypes has 'Malware' and DeliveryAction == 'Delivered') | extend Metric = 'Malware Delivered')\n| project Metric, Value",
+        "size": 3,
+        "title": "Inbound email and threat verdicts",
+        "queryType": 0,
+        "resourceType": "microsoft.operationalinsights/workspaces",
+        "crossComponentResources": [ "{Workspace}" ],
+        "visualization": "tiles",
+        "tileSettings": {
+          "titleContent": { "columnMatch": "Metric" },
+          "leftContent":  { "columnMatch": "Value", "formatter": 12, "formatOptions": { "palette": "auto" } },
+          "showBorder": true
+        }
+      },
+      "name": "headline-tiles"
+    },
+    {
+      "type": 1,
+      "content": {
+        "json": "## Post-delivery actions\n\nWhat ZAP and AIR removed AFTER delivery in this window. Higher is not necessarily worse — it just means MDO caught threats post-edge that earlier filters missed."
+      },
+      "name": "postdelivery-header"
+    },
+    {
+      "type": 3,
+      "content": {
+        "version": "KqlItem/1.0",
+        "query": "EmailPostDeliveryEvents\n| where TimeGenerated {TimeRange}\n| summarize Count = count() by ActionType\n| order by Count desc",
+        "size": 0,
+        "title": "Post-delivery actions by type",
+        "queryType": 0,
+        "resourceType": "microsoft.operationalinsights/workspaces",
+        "crossComponentResources": [ "{Workspace}" ],
+        "visualization": "barchart"
+      },
+      "name": "postdelivery-by-type"
+    },
+    {
+      "type": 3,
+      "content": {
+        "version": "KqlItem/1.0",
+        "query": "EmailPostDeliveryEvents\n| where TimeGenerated {TimeRange}\n| make-series Count = count() default = 0 on TimeGenerated from {TimeRange:start} to {TimeRange:end} step 1d by ActionType",
+        "size": 0,
+        "title": "Post-delivery actions over time",
+        "queryType": 0,
+        "resourceType": "microsoft.operationalinsights/workspaces",
+        "crossComponentResources": [ "{Workspace}" ],
+        "visualization": "linechart"
+      },
+      "name": "postdelivery-timeseries"
+    },
+    {
+      "type": 1,
+      "content": {
+        "json": "## User-reported phish\n\nVolume of reports through the built-in Outlook Report button and how AIR is handling them."
+      },
+      "name": "user-reported-header"
+    },
+    {
+      "type": 3,
+      "content": {
+        "version": "KqlItem/1.0",
+        "query": "AlertInfo\n| where TimeGenerated {TimeRange}\n| where ServiceSource == 'Microsoft Defender for Office 365'\n| where Title has 'Email reported by user'\n| summarize ReportCount = count() by bin(TimeGenerated, 1d)\n| render timechart",
+        "size": 0,
+        "title": "User reports per day",
+        "queryType": 0,
+        "resourceType": "microsoft.operationalinsights/workspaces",
+        "crossComponentResources": [ "{Workspace}" ]
+      },
+      "name": "user-reports-per-day"
+    },
+    {
+      "type": 3,
+      "content": {
+        "version": "KqlItem/1.0",
+        "query": "AlertInfo\n| where TimeGenerated {TimeRange}\n| where ServiceSource == 'Microsoft Defender for Office 365'\n| where Title has 'Email reported by user'\n| summarize ReportCount = count() by AlertId\n| join kind=inner (\n    AlertEvidence\n    | where TimeGenerated {TimeRange}\n    | where EntityType == 'User'\n    | project AlertId, Reporter = AccountUpn\n) on AlertId\n| summarize Reports = sum(ReportCount) by Reporter\n| top 20 by Reports desc",
+        "size": 0,
+        "title": "Top 20 reporters",
+        "queryType": 0,
+        "resourceType": "microsoft.operationalinsights/workspaces",
+        "crossComponentResources": [ "{Workspace}" ],
+        "visualization": "table"
+      },
+      "name": "top-reporters"
+    },
+    {
+      "type": 1,
+      "content": {
+        "json": "## Action Center activity\n\nProxy for SOC analyst remediation throughput. Every entry here was either an automatic AIR action or a manual Take Action by a Data Investigator."
+      },
+      "name": "action-center-header"
+    },
+    {
+      "type": 3,
+      "content": {
+        "version": "KqlItem/1.0",
+        "query": "OfficeActivity\n| where TimeGenerated {TimeRange}\n| where Operation in ('HardDelete','SoftDelete','MoveToDeletedItems','Set-MailItem')\n| summarize ActionCount = count() by Operation, bin(TimeGenerated, 1d)\n| render columnchart with (kind=stacked)",
+        "size": 0,
+        "title": "Remediation operations per day",
+        "queryType": 0,
+        "resourceType": "microsoft.operationalinsights/workspaces",
+        "crossComponentResources": [ "{Workspace}" ]
+      },
+      "name": "action-center-ops"
+    },
+    {
+      "type": 1,
+      "content": {
+        "json": "## Top phish sender domains delivered\n\nThe ones that got past EOP/MDO and reached at least one mailbox. These are the candidates for TABL block entries or anti-phish trusted-sender review."
+      },
+      "name": "top-domains-header"
+    },
+    {
+      "type": 3,
+      "content": {
+        "version": "KqlItem/1.0",
+        "query": "EmailEvents\n| where TimeGenerated {TimeRange}\n| where EmailDirection == 'Inbound'\n| where ThreatTypes has 'Phish' and DeliveryAction == 'Delivered'\n| summarize Delivered = count(), Recipients = dcount(RecipientEmailAddress) by SenderFromDomain\n| order by Delivered desc\n| take 20",
+        "size": 0,
+        "title": "Top phish sender domains (delivered only)",
+        "queryType": 0,
+        "resourceType": "microsoft.operationalinsights/workspaces",
+        "crossComponentResources": [ "{Workspace}" ],
+        "visualization": "table",
+        "gridSettings": {
+          "formatters": [
+            {
+              "columnMatch": "Delivered",
+              "formatter": 8,
+              "formatOptions": { "min": 0, "palette": "yellowOrangeRed" }
+            }
+          ],
+          "sortBy": [ { "itemKey": "Delivered", "sortOrder": 2 } ]
+        }
+      },
+      "name": "top-domains-table"
+    }
+  ],
+  "fallbackResourceIds": [],
+  "fromTemplateId": "trap-mdo-migration/mdo-operational-dashboard",
+  "$schema": "https://github.com/Microsoft/Application-Insights-Workbooks/blob/master/schema/workbook.json"
+}

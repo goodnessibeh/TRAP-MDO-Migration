@@ -1,0 +1,215 @@
+{
+  "$schema": "https://schema.management.azure.com/schemas/2019-04-01/deploymentTemplate.json#",
+  "contentVersion": "1.0.0.0",
+  "metadata": {
+    "title": "P6 - Two-Stage-Approval-VIP",
+    "description": "HTTP-triggered two-stage Teams approval for VIP-touching remediation actions. Called by P1 when a VIP recipient is in the message recipient set. Stage 1 posts to the SOC L1 channel; on approve, Stage 2 posts to the SOC Manager / Legal channel. Both must approve before the remediation Take Action is called. Either rejecting at any stage halts. Conservative defaults: 4-hour timeout per stage, soft-delete only. Documented in 10-logic-apps-playbook-library.md P6.",
+    "prerequisites": "Defender XDR Take Action API access for the MI; Teams API connection; Sentinel API connection for incident comments.",
+    "lastUpdate": "2026-05-20",
+    "entities": ["MailMessage"],
+    "tags": ["TRAP-MDO-Migration", "Phase-3", "P6", "Two-Stage", "VIP"]
+  },
+  "parameters": {
+    "PlaybookName":             { "type": "string", "defaultValue": "trap-mdo-P6-two-stage-approval-vip" },
+    "SentinelConnectionName":   { "type": "string", "defaultValue": "azuresentinel" },
+    "TeamsConnectionName":      { "type": "string", "defaultValue": "teams" },
+    "SocL1TeamId":              { "type": "string", "metadata": { "description": "Teams team id for SOC L1." } },
+    "SocL1ChannelId":           { "type": "string" },
+    "SocManagerTeamId":         { "type": "string", "metadata": { "description": "Teams team id for SOC managers / Legal." } },
+    "SocManagerChannelId":      { "type": "string" },
+    "Location":                 { "type": "string", "defaultValue": "[resourceGroup().location]" }
+  },
+  "variables": {
+    "sentinelConnId": "[resourceId('Microsoft.Web/connections', parameters('SentinelConnectionName'))]",
+    "teamsConnId":    "[resourceId('Microsoft.Web/connections', parameters('TeamsConnectionName'))]",
+    "sentinelApi":    "[concat('/subscriptions/', subscription().subscriptionId, '/providers/Microsoft.Web/locations/', parameters('Location'), '/managedApis/azuresentinel')]",
+    "teamsApi":       "[concat('/subscriptions/', subscription().subscriptionId, '/providers/Microsoft.Web/locations/', parameters('Location'), '/managedApis/teams')]"
+  },
+  "resources": [
+    {
+      "type": "Microsoft.Logic/workflows",
+      "apiVersion": "2019-05-01",
+      "name": "[parameters('PlaybookName')]",
+      "location": "[parameters('Location')]",
+      "identity": { "type": "SystemAssigned" },
+      "properties": {
+        "state": "Enabled",
+        "definition": {
+          "$schema": "https://schema.management.azure.com/providers/Microsoft.Logic/schemas/2016-06-01/workflowdefinition.json#",
+          "contentVersion": "1.0.0.0",
+          "parameters": {
+            "$connections":        { "type": "Object", "defaultValue": {} },
+            "SocL1TeamId":         { "type": "String", "defaultValue": "[parameters('SocL1TeamId')]" },
+            "SocL1ChannelId":      { "type": "String", "defaultValue": "[parameters('SocL1ChannelId')]" },
+            "SocManagerTeamId":    { "type": "String", "defaultValue": "[parameters('SocManagerTeamId')]" },
+            "SocManagerChannelId": { "type": "String", "defaultValue": "[parameters('SocManagerChannelId')]" }
+          },
+          "triggers": {
+            "manual": {
+              "type": "Request",
+              "kind": "Http",
+              "inputs": {
+                "method": "POST",
+                "schema": {
+                  "type": "object",
+                  "required": [ "incidentArmId", "mailEntities" ],
+                  "properties": {
+                    "incidentArmId": { "type": "string" },
+                    "mailEntities":  { "type": "array" },
+                    "vipTouched":    { "type": "boolean" }
+                  }
+                }
+              }
+            }
+          },
+          "actions": {
+            "Stage_1_SOC_L1_approval": {
+              "type": "ApiConnectionWebhook",
+              "runAfter": {},
+              "inputs": {
+                "host": { "connection": { "name": "@parameters('$connections')['teams']['connectionId']" } },
+                "body": {
+                  "notificationUrl": "@listCallbackUrl()",
+                  "messageBody": "P6 Stage 1/2 — VIP-touching remediation request. Incident: @{triggerBody()?['incidentArmId']}. MailMessage entities: @{length(triggerBody()?['mailEntities'])}. Approve to escalate to SOC Manager / Legal.",
+                  "updateMessage": "Stage 1 decision recorded.",
+                  "options": "Approve,Reject",
+                  "recipient": {
+                    "channelId": "@parameters('SocL1ChannelId')",
+                    "teamId": "@parameters('SocL1TeamId')"
+                  }
+                },
+                "path": "/flowbot/actions/teamsapproval/$subscriptions"
+              }
+            },
+            "Decide_Stage_1": {
+              "type": "If",
+              "runAfter": { "Stage_1_SOC_L1_approval": [ "Succeeded" ] },
+              "expression": { "and": [ { "equals": [ "@body('Stage_1_SOC_L1_approval')?['selectedOption']", "Approve" ] } ] },
+              "actions": {
+                "Stage_2_Manager_approval": {
+                  "type": "ApiConnectionWebhook",
+                  "inputs": {
+                    "host": { "connection": { "name": "@parameters('$connections')['teams']['connectionId']" } },
+                    "body": {
+                      "notificationUrl": "@listCallbackUrl()",
+                      "messageBody": "P6 Stage 2/2 — VIP remediation. Stage 1 approved by @{body('Stage_1_SOC_L1_approval')?['responder']?['displayName']}. Confirm to proceed with soft-delete tenant-wide.",
+                      "updateMessage": "Stage 2 decision recorded.",
+                      "options": "Approve,Reject",
+                      "recipient": {
+                        "channelId": "@parameters('SocManagerChannelId')",
+                        "teamId": "@parameters('SocManagerTeamId')"
+                      }
+                    },
+                    "path": "/flowbot/actions/teamsapproval/$subscriptions"
+                  }
+                },
+                "Decide_Stage_2": {
+                  "type": "If",
+                  "runAfter": { "Stage_2_Manager_approval": [ "Succeeded" ] },
+                  "expression": { "and": [ { "equals": [ "@body('Stage_2_Manager_approval')?['selectedOption']", "Approve" ] } ] },
+                  "actions": {
+                    "For_each_mail_entity": {
+                      "type": "Foreach",
+                      "foreach": "@triggerBody()?['mailEntities']",
+                      "actions": {
+                        "Call_TakeAction_softdelete": {
+                          "type": "Http",
+                          "inputs": {
+                            "method": "POST",
+                            "uri": "https://api.security.microsoft.com/api/messages/takeAction",
+                            "headers": { "Content-Type": "application/json" },
+                            "authentication": { "type": "ManagedServiceIdentity", "audience": "https://api.security.microsoft.com" },
+                            "body": {
+                              "NetworkMessageIds": [ "@items('For_each_mail_entity')?['properties']?['networkMessageId']" ],
+                              "ActionType": "SoftDelete",
+                              "Justification": "P6 VIP two-stage approval: L1=@{body('Stage_1_SOC_L1_approval')?['responder']?['displayName']}, Mgr=@{body('Stage_2_Manager_approval')?['responder']?['displayName']}"
+                            }
+                          },
+                          "runtimeConfiguration": { "concurrency": { "repetitions": 5 } }
+                        }
+                      }
+                    },
+                    "Comment_completed": {
+                      "type": "ApiConnection",
+                      "runAfter": { "For_each_mail_entity": [ "Succeeded" ] },
+                      "inputs": {
+                        "host": { "connection": { "name": "@parameters('$connections')['azuresentinel']['connectionId']" } },
+                        "method": "post",
+                        "path": "/Incidents/Comment",
+                        "body": {
+                          "incidentArmId": "@triggerBody()?['incidentArmId']",
+                          "message": "P6 two-stage approval complete and remediated at @{utcNow()}. L1 approver: @{body('Stage_1_SOC_L1_approval')?['responder']?['displayName']}; Manager approver: @{body('Stage_2_Manager_approval')?['responder']?['displayName']}."
+                        }
+                      }
+                    },
+                    "Respond_approved": {
+                      "type": "Response",
+                      "runAfter": { "Comment_completed": [ "Succeeded" ] },
+                      "inputs": { "statusCode": 200, "body": { "decision": "approved", "stage": 2 } }
+                    }
+                  },
+                  "else": {
+                    "actions": {
+                      "Comment_stage2_rejected": {
+                        "type": "ApiConnection",
+                        "inputs": {
+                          "host": { "connection": { "name": "@parameters('$connections')['azuresentinel']['connectionId']" } },
+                          "method": "post",
+                          "path": "/Incidents/Comment",
+                          "body": {
+                            "incidentArmId": "@triggerBody()?['incidentArmId']",
+                            "message": "P6 rejected at Stage 2 by @{body('Stage_2_Manager_approval')?['responder']?['displayName']}. No action."
+                          }
+                        }
+                      },
+                      "Respond_stage2_rejected": {
+                        "type": "Response",
+                        "runAfter": { "Comment_stage2_rejected": [ "Succeeded" ] },
+                        "inputs": { "statusCode": 200, "body": { "decision": "rejected", "stage": 2 } }
+                      }
+                    }
+                  }
+                }
+              },
+              "else": {
+                "actions": {
+                  "Comment_stage1_rejected": {
+                    "type": "ApiConnection",
+                    "inputs": {
+                      "host": { "connection": { "name": "@parameters('$connections')['azuresentinel']['connectionId']" } },
+                      "method": "post",
+                      "path": "/Incidents/Comment",
+                      "body": {
+                        "incidentArmId": "@triggerBody()?['incidentArmId']",
+                        "message": "P6 rejected at Stage 1 by @{body('Stage_1_SOC_L1_approval')?['responder']?['displayName']}. No action."
+                      }
+                    }
+                  },
+                  "Respond_stage1_rejected": {
+                    "type": "Response",
+                    "runAfter": { "Comment_stage1_rejected": [ "Succeeded" ] },
+                    "inputs": { "statusCode": 200, "body": { "decision": "rejected", "stage": 1 } }
+                  }
+                }
+              }
+            }
+          },
+          "outputs": {}
+        },
+        "parameters": {
+          "$connections": {
+            "value": {
+              "azuresentinel": { "connectionId": "[variables('sentinelConnId')]", "connectionName": "[parameters('SentinelConnectionName')]", "id": "[variables('sentinelApi')]" },
+              "teams":         { "connectionId": "[variables('teamsConnId')]",    "connectionName": "[parameters('TeamsConnectionName')]",   "id": "[variables('teamsApi')]" }
+            }
+          }
+        }
+      }
+    }
+  ],
+  "outputs": {
+    "playbookName":              { "type": "string", "value": "[parameters('PlaybookName')]" },
+    "callbackUrl":               { "type": "string", "value": "[listCallbackURL(concat(resourceId('Microsoft.Logic/workflows', parameters('PlaybookName')), '/triggers/manual'), '2019-05-01').value]" },
+    "managedIdentityPrincipalId": { "type": "string", "value": "[reference(resourceId('Microsoft.Logic/workflows', parameters('PlaybookName')), '2019-05-01', 'Full').identity.principalId]" }
+  }
+}

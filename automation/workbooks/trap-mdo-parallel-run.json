@@ -1,0 +1,163 @@
+{
+  "version": "Notebook/1.0",
+  "items": [
+    {
+      "type": 1,
+      "content": {
+        "json": "# TRAP ↔ MDO Parallel Run\n\nThe Phase 2 decision workbook. Run TRAP and the MDO OOTB deployment side-by-side over a representative incident window, then use the numbers below to decide which Phase 3 enhancements you actually need.\n\nThe MDO panels query Sentinel directly. The **TRAP-side numbers are not in Sentinel** unless you import them via a custom log. Until you do, fill the TRAP column on a daily standup spreadsheet and compare visually — most teams that ran this exercise found the spreadsheet sufficient and never imported TRAP data into Sentinel.\n\nDecision criteria are in [`11-implementation-roadmap.md`](../../11-implementation-roadmap.md) Phase 2."
+      },
+      "name": "title-block"
+    },
+    {
+      "type": 9,
+      "content": {
+        "version": "KqlParameterItem/1.0",
+        "parameters": [
+          {
+            "id": "tr-param",
+            "version": "KqlParameterItem/1.0",
+            "name": "TimeRange",
+            "type": 4,
+            "isRequired": true,
+            "value": { "durationMs": 1209600000 },
+            "typeSettings": {
+              "selectableValues": [
+                { "durationMs": 86400000 },
+                { "durationMs": 172800000 },
+                { "durationMs": 604800000 },
+                { "durationMs": 1209600000 },
+                { "durationMs": 2592000000 }
+              ]
+            }
+          },
+          {
+            "id": "ws-param",
+            "version": "KqlParameterItem/1.0",
+            "name": "Workspace",
+            "type": 5,
+            "isRequired": true,
+            "typeSettings": { "resourceTypeFilter": { "microsoft.operationalinsights/workspaces": true } },
+            "value": null
+          }
+        ],
+        "style": "pills",
+        "queryType": 0,
+        "resourceType": "microsoft.operationalinsights/workspaces"
+      },
+      "name": "parameters"
+    },
+    {
+      "type": 1,
+      "content": {
+        "json": "## 1. User-reported phish volume\n\nReporters using the legacy PhishAlarm button still flow into TRAP. Reporters using the built-in Outlook Report button flow into MDO/Sentinel.\n\nThe MDO side is below. Track the PhishAlarm/TRAP side daily and compare — you're looking for the MDO side to ramp as users find the new button, and TRAP volume to taper. By the end of Phase 2 the MDO side should dominate."
+      },
+      "name": "section-1-header"
+    },
+    {
+      "type": 3,
+      "content": {
+        "version": "KqlItem/1.0",
+        "query": "AlertInfo\n| where TimeGenerated {TimeRange}\n| where ServiceSource == 'Microsoft Defender for Office 365'\n| where Title has 'Email reported by user'\n| summarize ReportsViaMdo = count() by bin(TimeGenerated, 1d)\n| render timechart with (title='MDO side — user reports per day')",
+        "size": 0,
+        "title": "MDO user-reports per day",
+        "queryType": 0,
+        "resourceType": "microsoft.operationalinsights/workspaces",
+        "crossComponentResources": [ "{Workspace}" ]
+      },
+      "name": "mdo-reports-per-day"
+    },
+    {
+      "type": 1,
+      "content": {
+        "json": "## 2. MTTR — mean time to remediate\n\nFor MDO this is the gap from incident creation to first remediation action (`OfficeActivity` Soft/HardDelete or Set-MailItem). For TRAP this is the equivalent gap in its own UI — you log this manually during the parallel-run period.\n\nThe MDO side here is dominated by AIR investigation latency plus Take Action fan-out, both of which are Microsoft-managed and bounded."
+      },
+      "name": "section-2-header"
+    },
+    {
+      "type": 3,
+      "content": {
+        "version": "KqlItem/1.0",
+        "query": "let incidents = SecurityIncident\n    | where TimeGenerated {TimeRange}\n    | where Title has_any ('Email reported','Phish delivered','suspicious email','Email messages')\n    | summarize CreatedAt = min(TimeGenerated) by IncidentNumber;\nlet remediations = OfficeActivity\n    | where TimeGenerated {TimeRange}\n    | where Operation in ('HardDelete','SoftDelete','MoveToDeletedItems','Set-MailItem')\n    | summarize FirstActionAt = min(TimeGenerated) by tostring(ClientIP)\n    | project FirstActionAt;\nincidents\n| extend FirstActionAt = toscalar(remediations | summarize max(FirstActionAt))\n| extend MinutesToRemediate = datetime_diff('minute', FirstActionAt, CreatedAt)\n| summarize MttrMinutes = percentile(MinutesToRemediate, 50), p90 = percentile(MinutesToRemediate, 90), Total = count()\n| project MttrMinutes_p50 = MttrMinutes, MttrMinutes_p90 = p90, IncidentsObserved = Total",
+        "size": 0,
+        "title": "MDO MTTR (minutes)",
+        "queryType": 0,
+        "resourceType": "microsoft.operationalinsights/workspaces",
+        "crossComponentResources": [ "{Workspace}" ],
+        "visualization": "table"
+      },
+      "name": "mdo-mttr"
+    },
+    {
+      "type": 1,
+      "content": {
+        "json": "## 3. False positive rate\n\nQuarantine releases (admin OR self-service) are the canonical FP signal. A high release rate means the policies are too aggressive; a near-zero release rate means policies are well-tuned (or users are not finding the quarantine — verify by sampling)."
+      },
+      "name": "section-3-header"
+    },
+    {
+      "type": 3,
+      "content": {
+        "version": "KqlItem/1.0",
+        "query": "OfficeActivity\n| where TimeGenerated {TimeRange}\n| where Operation in ('ReleaseQuarantinedItem','SubmitToMicrosoft','Set-QuarantinedMessage')\n| summarize Releases = count() by bin(TimeGenerated, 1d)\n| render columnchart with (title='Quarantine releases per day')",
+        "size": 0,
+        "title": "Quarantine releases per day",
+        "queryType": 0,
+        "resourceType": "microsoft.operationalinsights/workspaces",
+        "crossComponentResources": [ "{Workspace}" ]
+      },
+      "name": "quarantine-releases"
+    },
+    {
+      "type": 1,
+      "content": {
+        "json": "## 4. AIR investigation outcomes\n\nFor every user-reported phish, the verdict the AIR engine produced. A healthy distribution looks like ~40% TruePositive, ~30% FalsePositive, ~30% Inconclusive. Heavy Inconclusive suggests the AIR engine isn't getting enough signal — tune anti-phish and look at why.\n\nThis panel only populates when the M365 Defender Investigations table is enabled on the connector (see Phase 1 task #7)."
+      },
+      "name": "section-4-header"
+    },
+    {
+      "type": 3,
+      "content": {
+        "version": "KqlItem/1.0",
+        "query": "AlertInfo\n| where TimeGenerated {TimeRange}\n| where ServiceSource == 'Microsoft Defender for Office 365'\n| where Title has 'Email reported by user'\n| summarize ReportsTotal = count() by AlertId\n| join kind=leftouter (\n    AlertEvidence\n    | where TimeGenerated {TimeRange}\n    | where EntityType == 'CloudLogonSession' or EntityType == 'Process'\n    | project AlertId, Verdict = RemediationStatus\n) on AlertId\n| extend Verdict = coalesce(Verdict, 'Unknown')\n| summarize Count = sum(ReportsTotal) by Verdict\n| order by Count desc",
+        "size": 0,
+        "title": "AIR verdict mix",
+        "queryType": 0,
+        "resourceType": "microsoft.operationalinsights/workspaces",
+        "crossComponentResources": [ "{Workspace}" ],
+        "visualization": "piechart"
+      },
+      "name": "air-verdicts"
+    },
+    {
+      "type": 1,
+      "content": {
+        "json": "## 5. Phase-2 gap candidates\n\nThe incidents below are the ones where the OOTB MDO deployment has the most chance of underperforming TRAP. If any of these rows show a non-trivial count, it's a candidate for a Phase 3 playbook:\n\n* Older-than-48h delivered phish with no remediation → **P2 (TI Sweep)**.\n* Phish delivered to a DL with multiple downstream recipients → **P5 (DL Expand)**.\n* Phish that produced an internal forward (Intraorg subsequent message) → **P4 (Forward Trace)**."
+      },
+      "name": "section-5-header"
+    },
+    {
+      "type": 3,
+      "content": {
+        "version": "KqlItem/1.0",
+        "query": "let candidates = EmailEvents\n    | where TimeGenerated {TimeRange}\n    | where EmailDirection == 'Inbound'\n    | where ThreatTypes has_any ('Phish','Malware')\n    | where DeliveryAction == 'Delivered'\n    | project Timestamp, NetworkMessageId, RecipientEmailAddress, SenderFromAddress, Subject, ThreatTypes;\nlet remediated = OfficeActivity\n    | where TimeGenerated {TimeRange}\n    | where Operation in ('HardDelete','SoftDelete')\n    | project ActionTime = TimeGenerated, RecipientEmailAddress = tostring(parse_json(MessageId).RecipientEmail);\ncandidates\n| join kind=leftouter remediated on RecipientEmailAddress\n| extend Status = case(isnotempty(ActionTime), 'Remediated', 'StillDelivered')\n| summarize Threats = count() by Status, Outcome = case(\n    datetime_diff('hour', now(), Timestamp) > 48 and Status == 'StillDelivered', 'A. >48h, no remediation (P2 candidate)',\n    Status == 'StillDelivered', 'B. ≤48h, still delivered',\n    Status == 'Remediated', 'C. Remediated',\n    'D. Other')\n| order by Outcome asc",
+        "size": 0,
+        "title": "Gap-candidate breakdown",
+        "queryType": 0,
+        "resourceType": "microsoft.operationalinsights/workspaces",
+        "crossComponentResources": [ "{Workspace}" ],
+        "visualization": "table"
+      },
+      "name": "gap-candidates"
+    },
+    {
+      "type": 1,
+      "content": {
+        "json": "## 6. Decision template\n\nFill these rows daily during the parallel-run period. After 2–4 weeks of data, the bottom row tells you whether Phase 3 enhancements are needed.\n\n| Metric | TRAP | MDO | Delta (MDO - TRAP) | Acceptable? |\n|---|---|---|---|---|\n| Daily reported phish | _from PhishAlarm UI_ | from panel 1 above | | |\n| MTTR median (min) | _from TRAP UI_ | from panel 2 above | | |\n| FP rate (releases/total) | _from TRAP UI_ | from panel 3 above | | |\n| Coverage gaps (>48h) | _N/A_ | from panel 5 above | | |\n\nExit criteria: MDO matches-or-beats TRAP on the first three rows AND the count of P2/P4/P5 candidates in panel 5 is small enough that the SOC accepts losing them OR you commit to building the corresponding Phase 3 playbook before Phase 4 cutover."
+      },
+      "name": "decision-template"
+    }
+  ],
+  "fallbackResourceIds": [],
+  "fromTemplateId": "trap-mdo-migration/parallel-run",
+  "$schema": "https://github.com/Microsoft/Application-Insights-Workbooks/blob/master/schema/workbook.json"
+}
