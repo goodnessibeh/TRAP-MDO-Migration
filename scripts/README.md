@@ -1,4 +1,4 @@
-# MDO Migration Audit Scripts — Setup
+# MDO Migration Audit Scripts. Setup
 
 PowerShell commands to set up the toolchain and connect to the tenant
 before running the audit scripts in this folder.
@@ -10,7 +10,7 @@ before running the audit scripts in this folder.
 
 ---
 
-## TL;DR — paste into an elevated `pwsh`
+## TL;DR. paste into an elevated `pwsh`
 
 ```powershell
 # 1. Trust scripts and PSGallery (one-time per machine)
@@ -36,12 +36,12 @@ cd <path-to>\TRAP-MDO-Migration\scripts
 .\Invoke-MdoThreatPolicyAudit.ps1
 ```
 
-If everything above succeeds you'll get a CSV report next to the script
+If everything above succeeds we'll get a CSV report next to the script
 and zero red text in the console.
 
 ---
 
-## Step 1 — Install PowerShell 7
+## Step 1. Install PowerShell 7
 
 If `pwsh --version` reports nothing, install PowerShell 7 first.
 
@@ -63,7 +63,7 @@ pwsh --version    # want 7.4.x or later
 
 ---
 
-## Step 2 — Execution policy
+## Step 2. Execution policy
 
 Default on Windows is `Restricted` (no scripts run). Set per-user once:
 
@@ -72,10 +72,10 @@ Set-ExecutionPolicy -ExecutionPolicy RemoteSigned -Scope CurrentUser
 ```
 
 Confirm `Y`. `RemoteSigned` lets local scripts run unsigned; scripts
-downloaded from the internet stay blocked until you `Unblock-File`
-them — that's the right safe default.
+downloaded from the internet stay blocked until we `Unblock-File`
+them. that's the right safe default.
 
-> If you got the repo as a ZIP from GitHub (not `git clone`), unblock
+> If we got the repo as a ZIP from GitHub (not `git clone`), unblock
 > the downloaded files once:
 > ```powershell
 > Get-ChildItem -Path .\scripts -Recurse -File | Unblock-File
@@ -88,22 +88,22 @@ Get-ExecutionPolicy -List
 
 ---
 
-## Step 3 — Trust PSGallery
+## Step 3. Trust PSGallery
 
-So you don't get the "untrusted repository" prompt on every install:
+So we don't get the "untrusted repository" prompt on every install:
 
 ```powershell
 Set-PSRepository -Name PSGallery -InstallationPolicy Trusted
 ```
 
-Modern (PSResourceGet) form, if your PS 7 has it:
+Modern (PSResourceGet) form, if our PS 7 has it:
 ```powershell
 Set-PSResourceRepository -Name PSGallery -Trusted
 ```
 
 ---
 
-## Step 4 — Install the required modules
+## Step 4. Install the required modules
 
 ```powershell
 Install-Module ExchangeOnlineManagement -Scope CurrentUser -Force -AllowClobber
@@ -128,21 +128,21 @@ Targets: **EXO ≥ 3.0**, **Microsoft.Graph ≥ 2.0**, **PSScriptAnalyzer ≥ 1.
 
 ---
 
-## Step 5 — Connect to the tenant
+## Step 5. Connect to the tenant
 
 Each connection opens a browser window for modern-auth sign-in the
 first time. Sign in with an account that has **Security Administrator**
 + **Exchange Administrator** roles.
 
 ```powershell
-# Exchange Online — needed by every audit script
+# Exchange Online. needed by every audit script
 Connect-ExchangeOnline -ShowBanner:$false
 
-# Security & Compliance — needed by the Alert Policy audit
+# Security & Compliance. needed by the Alert Policy audit
 # (it queries Get-ProtectionAlert, which only exists in this endpoint)
 Connect-IPPSSession -ShowBanner:$false
 
-# Microsoft Graph — needed by the optional licensing inspection in
+# Microsoft Graph. needed by the optional licensing inspection in
 # Phase 0 (per-mailbox MDO P2 coverage)
 Connect-MgGraph -Scopes "User.Read.All","Organization.Read.All"
 ```
@@ -161,7 +161,7 @@ more.
 
 ---
 
-## Step 6 — Run an audit
+## Step 6. Run an audit
 
 All four audit scripts default to `-Mode Audit` (read-only). They write
 a CSV with one row per check, including a `DefenderPortalUrl` column
@@ -170,7 +170,7 @@ linking each finding to the relevant page in `security.microsoft.com`.
 ```powershell
 cd <path-to>\TRAP-MDO-Migration\scripts
 
-# Read-only — safe to F5 from any editor.
+# Read-only. safe to F5 from any editor.
 .\Invoke-MdoThreatPolicyAudit.ps1
 .\Invoke-MdoAntiPhishAudit.ps1
 .\Invoke-MdoOutboundSpamAudit.ps1
@@ -191,11 +191,11 @@ non-zero on Fail/Error so they chain cleanly in pipelines.
 
 > `-Mode Live` with no scope flag deliberately applies to nothing.
 > Always pair Live with an explicit scope to avoid blanket overwrites.
-> Add `-Confirm` if you want per-change Y/N prompts.
+> Add `-Confirm` if we want per-change Y/N prompts.
 
 ---
 
-## Step 7 — Run the validator
+## Step 7. Run the validator
 
 ```powershell
 .\tests\Test-MdoMigrationScripts.ps1
@@ -206,10 +206,10 @@ Runs PSScriptAnalyzer over every script in `scripts/` against
 Warning. Use `-Fix` for auto-formatter fixes and `-OutputCsv
 .\findings.csv` to write a machine-readable report.
 
-## Step 8 — Bootstrap GitHub Issues for the migration
+## Step 8. Bootstrap GitHub Issues for the migration
 
-If you're tracking the migration on GitHub Issues, this script creates
-every label, milestone, and issue in one pass — idempotent, dry-run by
+If we're tracking the migration on GitHub Issues, this script creates
+every label, milestone, and issue in one pass. idempotent, dry-run by
 default.
 
 ```powershell
@@ -217,10 +217,10 @@ default.
 # https://cli.github.com/
 gh auth login
 
-# Dry run — prints what would be created, makes no changes
+# Dry run. prints what would be created, makes no changes
 .\Setup-GitHubIssues.ps1
 
-# Apply — creates ~45 issues + 6 milestones + 20 labels
+# Apply. creates ~45 issues + 6 milestones + 20 labels
 .\Setup-GitHubIssues.ps1 -Apply
 
 # Or roll out one phase at a time
@@ -245,11 +245,11 @@ issue templates used for new ad-hoc tasks beyond this bootstrap.
 | `Untrusted repository` prompt on every install | PSGallery not marked trusted | `Set-PSRepository -Name PSGallery -InstallationPolicy Trusted` |
 | `'Get-ProtectionAlert' is not recognised` while running alert audit | Not connected to Security & Compliance | `Connect-IPPSSession` |
 | `Get-MgUser` returns nothing | Graph connection or scope missing | `Connect-MgGraph -Scopes "User.Read.All","Organization.Read.All"` |
-| `Connect-ExchangeOnline` says "could not acquire token" / browser doesn't open | Headless context (WSL, SSH, container) or broken browser handoff | Use device-code auth: `Connect-ExchangeOnline -Device` — opens nothing, gives you a URL + 8-char code to enter on any browser. Same for `Connect-IPPSSession -Device` and `Connect-MgGraph -UseDeviceCode`. |
+| `Connect-ExchangeOnline` says "could not acquire token" / browser doesn't open | Headless context (WSL, SSH, container) or broken browser handoff | Use device-code auth: `Connect-ExchangeOnline -Device`. opens nothing, gives we a URL + 8-char code to enter on any browser. Same for `Connect-IPPSSession -Device` and `Connect-MgGraph -UseDeviceCode`. |
 | `Connect-ExchangeOnline` hangs then fails after some time | Conditional Access requires device compliance / MFA refresh | Sign in via the Azure portal first to satisfy any pending MFA challenge, then retry. Or get a CA exclusion for the admin account. |
 | Browser opens but loops back to "Pick an account" | Stale MSAL token cache | `Disconnect-ExchangeOnline -Confirm:$false; Remove-Item ~/.IdentityService -Recurse -Force -ErrorAction SilentlyContinue; Connect-ExchangeOnline -Device` |
 | The remote certificate is invalid because of errors in the certificate chain: `UntrustedRoot` | Corporate TLS-inspection proxy (e.g. Cloudflare WARP, Zscaler) intercepting PSGallery / login endpoints | Install the proxy CA in the system trust store, or pause TLS inspection for this device |
-| Scripts work in `pwsh` but not in ISE | ISE runs PS 5.1 — features in our `#Requires -Version 7.0` are unsupported | Open in VS Code or run `pwsh -File .\Invoke-Mdo*.ps1` |
+| Scripts work in `pwsh` but not in ISE | ISE runs PS 5.1. features in our `#Requires -Version 7.0` are unsupported | Open in VS Code or run `pwsh -File .\Invoke-Mdo*.ps1` |
 | `New-ReportSubmissionPolicy: A parameter cannot be found that matches parameter name 'EnableThirdPartyAddress'` | EXO Management module is older than v3 | `Update-Module ExchangeOnlineManagement -Force` then close and reopen `pwsh` |
 
 ---
@@ -262,15 +262,15 @@ issue templates used for new ad-hoc tasks beyond this bootstrap.
 | **Exchange Administrator** | New-Mailbox (reporting mailbox), inspect transport rules / ApplicationAccessPolicy, mailbox-level forwarding inspection |
 | **Global Reader** (read-only audit only) | Sufficient for `-Mode Audit` runs across all four scripts |
 
-For `-Mode Live` runs you need the first two. Global Reader is enough
-when you just want the CSV.
+For `-Mode Live` runs we need the first two. Global Reader is enough
+when we just want the CSV.
 
 ---
 
 ## Where to look in the portal
 
 The `DefenderPortalUrl` column in every audit CSV links a row to the
-exact page in `security.microsoft.com` where you can change the setting.
+exact page in `security.microsoft.com` where we can change the setting.
 Quick reference:
 
 | Area | URL |

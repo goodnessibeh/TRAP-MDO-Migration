@@ -1,4 +1,4 @@
-# Automation — Logic Apps + Workbooks
+# Automation. Logic Apps + Workbooks
 
 End-to-end automation artefacts to replace Proofpoint TRAP using
 Microsoft Defender for Office 365, Sentinel, and the engineered
@@ -8,14 +8,14 @@ playbooks documented in
 ```
 automation/
 ├── logic-apps/                    # ARM templates per playbook (all 8 shipped)
-│   ├── P3-notify-reporter-bridge/      [Phase 1 — OOTB]
-│   ├── P2-ti-sweep-remediate/          [Phase 3 — TI gap]
-│   ├── P4-forward-trace-remediate/     [Phase 3 — forward-follow gap]
-│   ├── P1-phish-remediate/             [Phase 3 — workhorse, optional P6 escalation]
-│   ├── P1b-phish-remediate-bulk/       [Phase 3 — paginator for P1]
-│   ├── P5-dl-expand-remediate/         [Phase 3 — Graph transitiveMembers, no Function App]
-│   ├── P6-two-stage-approval-vip/      [Phase 3 — only if SOC operates a tiered model]
-│   ├── P7-custom-abuse-mailbox-ingest/ [Phase 3 — only if built-in path insufficient]
+│   ├── P3-notify-reporter-bridge/      [Phase 1: OOTB]
+│   ├── P2-ti-sweep-remediate/          [Phase 3: TI gap]
+│   ├── P4-forward-trace-remediate/     [Phase 3: forward-follow gap]
+│   ├── P1-phish-remediate/             [Phase 3: workhorse, optional P6 escalation]
+│   ├── P1b-phish-remediate-bulk/       [Phase 3: Paginator for P1]
+│   ├── P5-dl-expand-remediate/         [Phase 3: Graph transitiveMembers, no Function App]
+│   ├── P6-two-stage-approval-vip/      [Phase 3: Only if SOC operates a tiered model]
+│   ├── P7-custom-abuse-mailbox-ingest/ [Phase 3: Only if built-in path insufficient]
 │   └── README.md                       # Per-playbook status + build order
 ├── workbooks/
 │   ├── mdo-operational-dashboard.json    [shipped]
@@ -96,9 +96,9 @@ most tenants. The most-likely-to-tune parameters and where they live:
 The deeper customisations the blueprint discusses (cross-vendor
 enrichment, hard-delete-with-legal-sign-off, per-business-unit
 approver routing, the auto-approve confidence threshold) are
-deliberately **not** baked in — they're decisions that change the
+deliberately **not** baked in. they're decisions that change the
 playbook's risk profile and need explicit SOC ownership before they
-land in your repo's main branch.
+land in our repo's main branch.
 
 ## What "validated" means here
 
@@ -132,10 +132,10 @@ The two test scripts perform static (offline) validation:
 What the validators **don't** do:
 
 * No actual Azure deploy / dry-run (`Test-AzResourceGroupDeployment`
-  needs an Azure connection — run separately when ready).
-* No KQL semantic check beyond paren balance — bad column names slip
+  needs an Azure connection. run separately when ready).
+* No KQL semantic check beyond paren balance. bad column names slip
   through. Run the query against Sentinel directly to catch those.
-* No `$expressions` evaluation. If you reference a workflow variable
+* No `$expressions` evaluation. If we reference a workflow variable
   that doesn't exist, the validator can't catch it; the deploy will.
 
 For full pre-flight before deploy, also run:

@@ -1,6 +1,6 @@
-# P1 — Phish-Remediate (the workhorse)
+# P1. Phish-Remediate (the workhorse)
 
-> **Status: shipped** with conservative defaults — single-stage Teams
+> **Status: shipped** with conservative defaults: single-stage Teams
 > approval, soft-delete only, VIP detection via the Sentinel
 > `VIP_Mailboxes` watchlist. Optional escalation to P6 when a VIP is
 > touched (set `-VipEscalationPlaybook` parameter).
@@ -10,12 +10,12 @@ Validates against `../../tests/Test-LogicAppTemplate.ps1`: 15/15 checks pass.
 ## Conservative defaults
 
 The blueprint specifies the full P1 action graph; this template bakes
-in safe choices that work for most tenants. Adjust as you discover
-your SOC's specifics.
+in safe choices that work for most tenants. Adjust as we discover
+our SOC's specifics.
 
 | Decision | Default | Override how |
 |---|---|---|
-| Delete type | `SoftDelete` | Change `ActionType` in `Call_TakeAction_softdelete` action — but get legal sign-off first |
+| Delete type | `SoftDelete` | Change `ActionType` in `Call_TakeAction_softdelete` action, but get legal sign-off first |
 | Approval tiers | Single Teams card | Deploy P6 and pass its callback URL as `VipEscalationPlaybook` |
 | VIP detection | Sentinel watchlist `VIP_Mailboxes` (column `SearchKey`) | Edit `Query_VIP_watchlist` action or pass `-VipWatchlistAlias` |
 | Cross-vendor enrichment | None | Add an HTTP step before `Compute_VIP_intersection` calling VirusTotal/MDTI/AbuseIPDB |
@@ -55,18 +55,18 @@ decision baked in:
   rotation policy)
 - "Auto-approve if confidence > X" thresholds
 
-The blueprint's pseudocode in §P1 gives you the full action list. The
-shape of the working JSON looks like P2/P4 concatenated — the actual
+The blueprint's pseudocode in §P1 gives we the full action list. The
+shape of the working JSON looks like P2/P4 concatenated. The actual
 shape isn't the hard part; the policy decisions are. Treat the
 existing P2/P3/P4 templates as the structural reference and add the
-P1 specifics as you decide them.
+P1 specifics as we decide them.
 
 ## Recommended sequence
 
 1. Ship P3 (Reporter Bridge) in Phase 1 (the OOTB deployment).
 2. Ship P2 (TI Sweep) and P4 (Forward Trace) in Phase 3 once the SOC
    confirms they want them.
-3. After 30 days of operation, write P1 — by then you know which of
+3. After 30 days of operation, write P1. By then we know which of
    the P1 design questions actually need to be answered and which are
    theoretical.
 4. P1b is just a pagination helper for P1; build them together.

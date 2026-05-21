@@ -106,6 +106,141 @@ UI path: `https://security.microsoft.com/presetSecurityPolicies` →
 *Strict protection* → *Manage protection settings* → scope to *All recipients*
 in *all domains* → enable.
 
+#### Pilot scope. Interim state during migration
+
+The end state is the preset applied to all recipients in all accepted
+domains. Until we get there, we scope the preset to a small named
+pilot group so we can observe the system under change before any
+business-wide impact. The current scope:
+
+* Scoped to **3 mailboxes** in our team only.
+* Recipient list documented in our change record (see ticket reference
+  in the change-management system; not embedded here so the list can
+  rotate without doc churn).
+* Duration. Intended as a short observation window, not a permanent
+  state. Widen to all accepted domains via Phase 1 exit criteria
+  before Phase 2 starts.
+
+##### Why we're doing it this way
+
+The preset takes precedence over custom anti-phish, anti-spam,
+anti-malware, Safe Links, and Safe Attachments policies for any
+recipient it covers. Platform maintainers have flagged this and they
+are right. The pilot scope is the mitigation. It bounds the blast
+radius of the precedence effect to the 3 mailboxes in scope, which:
+
+* All belong to the migration team.
+* Are not VIPs or executives.
+* Have no business-critical inbound flows we cannot afford to lose for
+  an hour.
+* Are visible to us hourly during the observation window.
+
+##### What the pilot scope buys us
+
+* We get to watch how the strict baseline behaves against real
+  inbound mail (quarantine rate, false-positive rate, ZAP retro
+  actions) before we widen.
+* If something surprising happens, the rollback is one PowerShell
+  call (or one portal click) to remove the preset rule scope. The
+  three custom-policy-only mailboxes start receiving custom-policy
+  treatment again on the next message.
+* We get the parallel-run telemetry the Phase 2 workbook expects from
+  a controlled subset, not a tenant-wide change set.
+
+##### What we accept while the pilot is on
+
+* The 3 pilot mailboxes get preset behaviour, which overrides their
+  custom anti-phish / anti-spam / anti-malware / Safe Links / Safe
+  Attachments policies for the window. This is intentional. Custom
+  policies still apply to every other recipient in the tenant.
+* If anyone in the rest of the tenant reports a problem, it is not
+  the preset (because they are not in scope).
+
+##### The bigger comparison the pilot lets us run
+
+Acknowledged: the preset takes precedence over our custom policies for
+any recipient it covers. The pilot is not just a low-risk staging
+mechanism. It is also the only way we can compare the preset and our
+custom policy stack head-to-head on real production mail without
+exposing the wider tenant to either side's mistakes.
+
+The two questions we are trying to answer in this window:
+
+* **Does the preset actually outperform our custom stack on the cases
+  we care about?** Quarantine accuracy, false-positive rate, ZAP retro
+  hit rate, AIR cluster quality. If the preset wins, we widen and
+  retire the overlapping custom policies. If the preset loses on a
+  measurable axis, we keep the relevant custom rule in place for
+  recipients outside the preset scope, and document the exception.
+* **What can we still tune on the custom side that the preset cannot
+  do?** Anti-phish trusted-sender lists tailored to known internal
+  flows, custom impersonation targets for specific VIPs, organisation-
+  specific Safe Links bypass for known-good vendors. The preset's
+  precedence does not stop us from running those custom rules
+  outside the preset's scope; it only prevents them from layering
+  on top of preset-covered mailboxes.
+
+What we measure while the pilot is on, on each side:
+
+| Axis | How we measure on the preset side | How we measure on the custom side |
+|---|---|---|
+| Quarantine rate | `EmailEvents` on the 3 pilot mailboxes, group by `DeliveryAction` | Same query against a comparable peer mailbox set on custom only |
+| False positive rate | Self-service releases + admin overrides from `OfficeActivity` | Same |
+| ZAP retro hits | `EmailPostDeliveryEvents` filtered to the pilot mailboxes | Same against the peer mailbox set |
+| Investigation outcomes | AIR investigation `Verdict` distribution from `AlertInfo` | Same against the peer mailbox set |
+| Quarantine release latency | `OfficeActivity` `ReleaseQuarantinedItem` timestamp minus original delivery | Same |
+
+The peer mailbox set is the simplest control. It is a comparable
+group of 3 mailboxes in the same team that we deliberately leave on
+custom policy only for the duration of the pilot. Same role, same
+exposure, no preset. Sized to match the pilot so the comparison is
+honest.
+
+If the preset wins across most axes when the pilot exits, the widen
+is justified on data, not on assumption. If it does not, we record
+the exceptions in [`14-open-questions.md`](./14-open-questions.md),
+keep the relevant custom policies outside the widen scope, and revisit.
+
+##### Exit criteria to widen the scope
+
+We widen the preset to all accepted domains when, at minimum:
+
+* T1 to T7 in §4.1 have passed against the pilot set.
+* No unexpected quarantine pattern observed on the pilot mailboxes
+  for at least one full business week.
+* The Sentinel email-security workbook populates and SOC analysts
+  confirm the verdict mix is reasonable.
+
+The widen command is one line:
+
+```powershell
+.\scripts\Invoke-MdoThreatPolicyAudit.ps1 -WidenToAll -Mode Live
+```
+
+##### Rollback
+
+If we need to revert to custom-policy-only on the pilot set immediately:
+
+```powershell
+Disable-EOPProtectionPolicyRule -Identity "Strict Preset Security Policy"
+Disable-ATPProtectionPolicyRule -Identity "Strict Preset Security Policy"
+```
+
+Or remove the pilot scoping while keeping the rule available for the
+later tenant-wide enable:
+
+```powershell
+Set-EOPProtectionPolicyRule -Identity "Strict Preset Security Policy" -SentTo $null -SentToMemberOf $null
+Set-ATPProtectionPolicyRule -Identity "Strict Preset Security Policy" -SentTo $null -SentToMemberOf $null
+```
+
+##### Sign-off
+
+This pilot scope was reviewed with platform maintainers and accepted
+on the basis above. Sign-off is recorded in our change-management
+system against the ticket for this rollout. The exit-criteria sign-off
+to widen the scope follows the same path.
+
 ### 2.2 Confirm ZAP enabled (default ON; verify)
 
 ```powershell

@@ -38,7 +38,7 @@ with a `DefenderPortalUrl` column linking to the relevant page in
 > outbound-spam `Default` policy) need `-IncludeDefaultPolicy` to be
 > touched.
 
-### Mode parameter — safe defaults for ISE / VS Code F5
+### Mode parameter. safe defaults for ISE / VS Code F5
 
 Every script that can change tenant state takes `-Mode`:
 
@@ -47,9 +47,9 @@ Every script that can change tenant state takes `-Mode`:
 * `-Mode Live`: idempotent writes (scope preset to pilot, widen, enable
   preset rules, disable Auto-Resolve rule etc.).
 
-This means you can open any of these scripts in VS Code or `pwsh` and
-hit Run / F5 — they default to Audit. Switch to `-Mode Live` only when
-you intend to apply changes.
+This means we can open any of these scripts in VS Code or `pwsh` and
+hit Run / F5. they default to Audit. Switch to `-Mode Live` only when
+we intend to apply changes.
 
 > Use `pwsh` 7+ (or VS Code with the PowerShell extension), **not**
 > Windows PowerShell ISE. The scripts use PS7 features
@@ -61,14 +61,14 @@ you intend to apply changes.
 Roll out Strict preset to test users first, then widen:
 
 ```powershell
-# Phase 1a — pilot
+# Phase 1a: pilot
 .\scripts\Invoke-MdoThreatPolicyAudit.ps1 `
     -PilotUsers alice@<tenant>,bob@<tenant>,charlie@<tenant> `
     -Mode Live
 
 # Validate for a week. When happy:
 
-# Phase 1b — widen to all accepted domains
+# Phase 1b: widen to all accepted domains
 .\scripts\Invoke-MdoThreatPolicyAudit.ps1 -WidenToAll -Mode Live
 ```
 
@@ -113,12 +113,12 @@ cross-platform.
 
 ---
 
-## 1. Phase 0 — Pre-migration audits
+## 1. Phase 0. Pre-migration audits
 
 ### 1.1 MDO P2 licence coverage
 
 Tenant-level P2 is already confirmed (Campaigns alerts visible). What we
-still owe Phase 0 is per-mailbox coverage — we need to find any user
+still owe Phase 0 is per-mailbox coverage. We need to find any user
 sitting on P1 or unassigned.
 
 ```powershell
@@ -184,12 +184,12 @@ Set-AdminAuditLogConfig -UnifiedAuditLogIngestionEnabled $true
 
 ---
 
-## 2. Phase 1 — Out-of-the-box MDO configuration
+## 2. Phase 1. Out-of-the-box MDO configuration
 
 ### 2.1 Preset security policies (Strict)
 
 The Strict preset is the OOTB baseline. Most config is via the portal at
-`https://security.microsoft.com/presetSecurityPolicies` — the PowerShell
+`https://security.microsoft.com/presetSecurityPolicies`. The PowerShell
 surface is read-only for the preset assignment itself, but we can inspect
 and verify.
 
@@ -345,18 +345,18 @@ and reports never arrive. The two-step structure (policy first, then
 rule) is mandatory.
 
 > Note: the rule cmdlets carry the `Exo` prefix. `New-SecOpsOverrideRule`
-> does **not** exist — it is `New-ExoSecOpsOverrideRule`. The blueprint's
+> does **not** exist. It is `New-ExoSecOpsOverrideRule`. The blueprint's
 > `00-MDO-out-of-the-box-deployment-guide.md` §2.4 currently has the
 > wrong name; see the note at the bottom of this file.
 
 ```powershell
-# Step 1 — create the policy. Name must be SecOpsOverridePolicy.
+# Step 1: create the policy. Name must be SecOpsOverridePolicy.
 New-SecOpsOverridePolicy `
   -Name SecOpsOverridePolicy `
   -SentTo "reportedmessages@<our-tenant>.com",
           "soc-quarantine@<our-tenant>.com"
 
-# Step 2 — create the rule that binds the policy
+# Step 2: create the rule that binds the policy
 New-ExoSecOpsOverrideRule `
   -Name SecOpsOverrideRule `
   -Policy SecOpsOverridePolicy
@@ -366,7 +366,7 @@ Get-SecOpsOverridePolicy | Format-List Name,SentTo,Mode
 Get-ExoSecOpsOverrideRule | Format-Table Name,Mode
 
 # Adding another address later (modifies BOTH policy and rule in one
-# call — do not edit the rule directly)
+# call. do not edit the rule directly)
 Set-SecOpsOverridePolicy -Identity SecOpsOverridePolicy `
                           -AddSentTo "extra-soc@<our-tenant>.com"
 
@@ -404,7 +404,7 @@ New-TenantAllowBlockListItems `
   -Entries "*.phishsim-vendor.com" -NoExpiration
 ```
 
-### 2.8 Alert tuning — make sure AIR can fire on user-reported phish
+### 2.8 Alert tuning: make sure AIR can fire on user-reported phish
 
 ```powershell
 # Find any tuning rule that auto-resolves the "Email reported by user"
@@ -442,7 +442,7 @@ New-TenantAllowBlockListItems -ListType Sender -Block `
   -ExpirationDate (Get-Date).AddDays(90) `
   -Notes "BEC attempt, ticket SOC-1234"
 
-# Allow (use sparingly — overrides spam/phish but NOT malware/high-conf phish)
+# Allow (use sparingly. overrides spam/phish but NOT malware/high-conf phish)
 New-TenantAllowBlockListItems -ListType Sender -Allow `
   -Entries "false-positive-sender@partner.com" `
   -ExpirationDate (Get-Date).AddDays(30) `
@@ -481,7 +481,7 @@ Remove-TenantAllowBlockListItems -ListType Sender -Entries "old-sender@example.c
 
 ---
 
-## 4. Phase 2 — Engineered enhancements: PowerShell building blocks
+## 4. Phase 2. Engineered enhancements: PowerShell building blocks
 
 These are what the engineered playbooks call. Keep them in source
 control; do not hand-edit in the portal.
@@ -493,7 +493,7 @@ Lives in the Security & Compliance endpoint, not EXO.
 ```powershell
 Connect-IPPSSession
 
-# 1. Build a search by NetworkMessageId (the most precise) — from
+# 1. Build a search by NetworkMessageId (the most precise): from
 #    AIR / Threat Explorer / KQL EmailEvents row
 $nmid = "abc123..."
 $searchName = "TRAP-replace-SOC-1234-$(Get-Date -Format yyyyMMdd-HHmm)"
@@ -507,7 +507,7 @@ Start-ComplianceSearch -Identity $searchName
 Get-ComplianceSearch -Identity $searchName |
   Format-List Status,Items,Size,JobStartTime,JobEndTime
 
-# 2. Purge — SoftDelete (recoverable) or HardDelete (permanent)
+# 2. Purge. SoftDelete (recoverable) or HardDelete (permanent)
 New-ComplianceSearchAction -SearchName $searchName -Purge -PurgeType SoftDelete
 
 # Verify
@@ -515,7 +515,7 @@ Get-ComplianceSearchAction -Identity "$searchName_Purge" | Format-List
 ```
 
 > SoftDelete moves to Deleted Items (recoverable for ~14 days).
-> HardDelete bypasses recovery — get legal sign-off before using by
+> HardDelete bypasses recovery. get legal sign-off before using by
 > default.
 >
 > Docs: [New-ComplianceSearchAction](https://learn.microsoft.com/en-us/powershell/module/exchangepowershell/new-compliancesearchaction)
@@ -555,11 +555,11 @@ Get-Mailbox -ResultSize Unlimited |
   Select-Object PrimarySmtpAddress,ForwardingAddress,ForwardingSmtpAddress,DeliverToMailboxAndForward |
   Export-Csv ~/forwarding-tenantwide.csv -NoTypeInformation
 
-# Message trace by Internet message id — find every internal copy
+# Message trace by Internet message id. find every internal copy
 Get-MessageTraceV2 -MessageId "<internetMessageId>" -StartDate (Get-Date).AddDays(-7) -EndDate (Get-Date)
 ```
 
-> `Get-MessageTrace` (without V2) is on the EXO retirement track —
+> `Get-MessageTrace` (without V2) is on the EXO retirement track -
 > use `Get-MessageTraceV2` for any new code. Both still exist as of
 > 2026-Q2.
 
@@ -585,7 +585,7 @@ Remove-ApplicationAccessPolicy -Identity <identity-from-Get-ApplicationAccessPol
 
 ---
 
-## 5. Phase 4 / 5 — Cutover and decommission
+## 5. Phase 4 / 5. Cutover and decommission
 
 ### 5.1 Sanity-check before decommission
 
@@ -694,7 +694,7 @@ canonical landing pages we keep going back to:
 - [Connect to Exchange Online PowerShell](https://learn.microsoft.com/en-us/powershell/exchange/connect-to-exchange-online-powershell)
 - [Configure user reported message settings](https://learn.microsoft.com/en-us/defender-office-365/submissions-user-reported-messages-custom-mailbox)
 - [Advanced delivery policy (SecOps mailbox)](https://learn.microsoft.com/en-us/defender-office-365/advanced-delivery-policy-configure)
-- [Tenant Allow/Block List — email/spoof](https://learn.microsoft.com/en-us/defender-office-365/tenant-allow-block-list-email-spoof-configure)
+- [Tenant Allow/Block List. email/spoof](https://learn.microsoft.com/en-us/defender-office-365/tenant-allow-block-list-email-spoof-configure)
 - [Zero-hour auto purge (ZAP)](https://learn.microsoft.com/en-us/defender-office-365/zero-hour-auto-purge)
 - [Preset security policies](https://learn.microsoft.com/en-us/defender-office-365/preset-security-policies)
 - [Safe Attachments policies](https://learn.microsoft.com/en-us/defender-office-365/safe-attachments-policies-configure)

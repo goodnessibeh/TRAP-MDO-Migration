@@ -1,4 +1,4 @@
-# P2 — TI Sweep Remediate
+# P2. TI Sweep Remediate
 
 Closes the biggest TRAP-vs-MDO gap that Phase 2 typically surfaces:
 remediation of messages older than ZAP's 48-hour window when fresh
@@ -12,7 +12,7 @@ Documented in:
 ## Flow
 
 1. **Hourly recurrence** trigger.
-2. **Run hunting query** via Sentinel API — joins `EmailEvents` ∪
+2. **Run hunting query** via Sentinel API. Joins `EmailEvents` ∪
    `EmailAttachmentInfo` ∪ `EmailUrlInfo` against the
    `ThreatIntelligenceIndicator` table (populated by MDTI / TAXII /
    MISP). Lookback default 14 days; excludes the last 48h (ZAP covers
@@ -20,21 +20,21 @@ Documented in:
 3. If matches found:
    * Post an **adaptive-card approval** to the SOC's Teams channel
      summarising the count and sample.
-   * On **Approve** — iterate matches and call the Defender XDR
+   * On **Approve**. Iterate matches and call the Defender XDR
      `messages/takeAction` API with `ActionType: SoftDelete` per
      `NetworkMessageId`. Concurrency capped to 5 to respect API
      throttling.
-   * On **Reject** — record decision and exit.
+   * On **Reject**. Record decision and exit.
 4. If no matches found, exit silently (no Teams noise).
 
 ## Why the human-in-the-loop?
 
 TI feeds vary in quality. False positives during the early weeks of
-operating P2 are common until you've populated the `KnownBad_Senders`
+operating P2 are common until we've populated the `KnownBad_Senders`
 watchlist (which gets auto-promoted entries from previous TI hits we
 approved). Operationally, after ~30 days >70 % of P2 fires auto-approve
 through an upstream Sentinel automation rule with a watchlist
-short-circuit — the Teams card only appears for novel detections.
+short-circuit. The Teams card only appears for novel detections.
 
 ## Prerequisites
 
@@ -54,15 +54,15 @@ After deploy, the workflow's system-assigned identity needs:
 ```powershell
 $miPid = '<principalId from deployment output>'
 
-# Sentinel — read the workspace, write incident comments
+# Sentinel. Read the workspace, write incident comments
 New-AzRoleAssignment -ObjectId $miPid `
   -RoleDefinitionName 'Microsoft Sentinel Responder' `
   -Scope <workspace-resource-id>
 
-# Defender XDR (via Microsoft Graph) — Take Action API access
+# Defender XDR (via Microsoft Graph). Take Action API access
 # Done via Microsoft.Graph PowerShell against the WindowsDefenderATP
 # enterprise app:
-$msi  = Get-MgServicePrincipal -Filter "appId eq '<your-MI-clientId>'"
+$msi  = Get-MgServicePrincipal -Filter "appId eq '<our-MI-clientId>'"
 $wdat = Get-MgServicePrincipal -Filter "appId eq 'fc780465-2017-40d4-a0c5-307022471b92'"  # WindowsDefenderATP
 $role = $wdat.AppRoles | Where-Object Value -eq 'AdvancedHunting.Read.All'
 
@@ -85,12 +85,12 @@ New-AzResourceGroupDeployment `
 
 ## Tuning
 
-* `LookbackDays` — default 14, raise to 30 if your TI feeds are slow.
-  Don't go past 30 — `EmailEvents` retention is 30 days in Sentinel by
+* `LookbackDays`. Default 14, raise to 30 if our TI feeds are slow.
+  Don't go past 30. `EmailEvents` retention is 30 days in Sentinel by
   default.
-* Recurrence — default 1 hour. Make it 30 minutes during a critical
+* Recurrence. Default 1 hour. Make it 30 minutes during a critical
   campaign, daily for low-volume environments.
-* Auto-approve threshold — add an automation rule upstream that
+* Auto-approve threshold. Add an automation rule upstream that
   short-circuits the Teams card when sender domain is in the
   `KnownBad_Senders` watchlist.
 
@@ -106,5 +106,5 @@ New-AzResourceGroupDeployment `
   Microsoft. The repetitions cap of 5 keeps us well under that even
   on big sweeps.
 * The hunting query has a 30-second timeout in the Sentinel API. If
-  your environment has very high email volume, narrow the query
-  further (e.g. add `| where ThreatTypes != ''` to limit candidates).
+  our environment has very high email volume, narrow the query
+  further (e.g. Add `| where ThreatTypes != ''` to limit candidates).

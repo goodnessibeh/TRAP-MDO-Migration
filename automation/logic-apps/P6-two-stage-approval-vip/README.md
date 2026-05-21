@@ -1,4 +1,4 @@
-# P6 — Two-Stage-Approval-VIP
+# P6. Two-Stage-Approval-VIP
 
 > **Status: shipped.** HTTP-callable from P1 (pass the resource URL via
 > P1's `-VipEscalationPlaybook` parameter). Two Teams adaptive cards:
@@ -8,14 +8,14 @@
 
 Validates against `../../tests/Test-LogicAppTemplate.ps1`: 15/15 checks pass.
 
-Deploy only if your SOC operates a tiered approval model — most teams
+Deploy only if our SOC operates a tiered approval model. most teams
 find single-stage approval (P1's default) sufficient.
 
 Documented in [`10-logic-apps-playbook-library.md`](../../../10-logic-apps-playbook-library.md) §P6.
 
 ## Purpose
 
-Defender Action Center is single-tier — a Data Investigator clicks
+Defender Action Center is single-tier. A Data Investigator clicks
 Approve and the action runs. For incidents that touch a CEO/CFO
 mailbox, some organisations want a second approval (SOC manager or
 Legal) before remediation lands.
@@ -37,7 +37,7 @@ P6 inserts that second tier.
 ## Pattern to copy from
 
 The P2 template's `Post_Teams_approval_card` and `On_approval_branch`
-sections give you the structural shape. Stack two of them in P6.
+sections give we the structural shape. Stack two of them in P6.
 
 ## When P6 lands here
 

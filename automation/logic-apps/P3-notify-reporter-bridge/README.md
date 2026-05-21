@@ -1,4 +1,4 @@
-# P3 — Notify Reporter Bridge
+# P3. Notify Reporter Bridge
 
 Acknowledges users who report suspected phishing via the built-in
 Outlook Report button. Bridges the gap where AIR Auto Feedback
@@ -17,14 +17,14 @@ simplest of the seven playbooks. Documented in:
    incidents from `Email reported by user as malware or phish`.
 2. Filter the incident's related entities to the Account type
    (these are the reporters).
-3. For each reporter, send a single thank-you email from the SOC
+3. For each reporter, send a single thank-we email from the SOC
    service mailbox.
 4. Add a Sentinel incident comment recording the count of acknowledged
    reporters and timestamp.
 
-Operationally complements Microsoft's own AIR Auto Feedback Response —
+Operationally complements Microsoft's own AIR Auto Feedback Response -
 the reporter sees either Microsoft's verdict (when AIR fires
-successfully) or this bridge's thank-you (when AIR was suppressed or
+successfully) or this bridge's thank-we (when AIR was suppressed or
 ran too fast).
 
 ## Prerequisites

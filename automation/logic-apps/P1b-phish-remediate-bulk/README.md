@@ -1,4 +1,4 @@
-# P1b — Phish-Remediate-Bulk (pagination helper for P1)
+# P1b. Phish-Remediate-Bulk (pagination helper for P1)
 
 > **Status: shipped.** HTTP-callable from P1 (or any caller) with a
 > body of `{ "networkMessageIds": ["...","..."], "actionType":

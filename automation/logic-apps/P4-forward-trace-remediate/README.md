@@ -1,4 +1,4 @@
-# P4 — Forward Trace Remediate
+# P4. Forward Trace Remediate
 
 Walks every internal forward of a malicious message and remediates the
 internal copies via Defender XDR Take Action. Flags external forwards
@@ -19,7 +19,7 @@ Documented in:
    `Subject` + `SenderFromAddress` of the original message; gather
    every same-subject same-sender copy in the last 14 days.
 3. Split results into `Intraorg` (internal forwards) vs `Inbound`
-   (external — out of reach).
+   (external. out of reach).
 4. For internal copies: call Defender XDR
    `api/messages/takeAction` with `SoftDelete` per `NetworkMessageId`.
 5. For external copies: post a Teams adaptive notification to the SOC
@@ -31,7 +31,7 @@ Documented in:
 ## Why entity trigger (not incident trigger)?
 
 A Sentinel incident may bundle multiple `MailMessage` entities. The
-entity trigger lets you fan out P4 once per malicious message. If you
+entity trigger lets we fan out P4 once per malicious message. If we
 need incident-level, wire P4 from P1 (the workhorse) instead of from
 an automation rule.
 
@@ -42,18 +42,18 @@ an automation rule.
 | Sentinel workspace + `EmailEvents` stream | Phase 1 |
 | Defender XDR API permission for the Logic App MI | `AdvancedHunting.Read.All` + `Mail.ReadWrite` |
 | Sentinel + Teams API connections | Standard |
-| Q4 KQL implemented as a hunting query in the Sentinel workspace | Not strictly required — the playbook embeds the same query inline |
+| Q4 KQL implemented as a hunting query in the Sentinel workspace | Not strictly required. The playbook embeds the same query inline |
 
 ## Permissions to grant the MI
 
 ```powershell
 $miPid = '<principalId from deployment output>'
 
-# Sentinel — read workspace, write incident comments
+# Sentinel. Read workspace, write incident comments
 New-AzRoleAssignment -ObjectId $miPid `
   -RoleDefinitionName 'Microsoft Sentinel Responder' -Scope <workspace-resource-id>
 
-# Defender XDR — Take Action API
+# Defender XDR. Take Action API
 # See P2 README for the WindowsDefenderATP role assignment recipe.
 ```
 
@@ -93,5 +93,5 @@ Or invoke manually from the entity page in the Defender XDR portal
 * If the malicious message had its subject or sender modified between
   inbound and forward (rare, but BEC operators do it), the
   same-subject same-sender query misses. The trade-off is precision
-  over recall; broaden to `MessageId` matching if you can tolerate
+  over recall; broaden to `MessageId` matching if we can tolerate
   more false-positives.

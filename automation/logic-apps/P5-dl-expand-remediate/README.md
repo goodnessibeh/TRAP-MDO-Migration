@@ -1,16 +1,16 @@
-# P5 — DL-Expand-Remediate
+# P5. DL-Expand-Remediate
 
-> **Status: shipped — no Function App needed.** Uses Microsoft Graph's
+> **Status: shipped. No Function App needed.** Uses Microsoft Graph's
 > `groups/{id}/transitiveMembers` endpoint to recursively expand
 > distribution group membership. Works for any DL synced to Microsoft
 > Entra (the cloud-managed default). Pure on-prem DLs not in Entra
-> need a separate EXO PowerShell path — not implemented here.
+> need a separate EXO PowerShell path. not implemented here.
 
 Validates against `../../tests/Test-LogicAppTemplate.ps1`: 15/15 checks pass.
 
 Conservative defaults: 500-member safety cap (`-MaxMembers`); oversized
 DLs are flagged as an incident comment and skipped rather than blindly
-remediated. Bump the cap if your environment has legitimate large DLs.
+remediated. Bump the cap if our environment has legitimate large DLs.
 
 Documented in [`10-logic-apps-playbook-library.md`](../../../10-logic-apps-playbook-library.md) §P5
 and [`09-kql-detection-library.md`](../../../09-kql-detection-library.md) Q8.
@@ -43,7 +43,7 @@ P5 Logic App  ── HTTP ──>  Azure Function (PowerShell)
 ## Why a Function App (not native)
 
 Logic Apps can call EXO via the Office 365 connector but the connector
-only exposes a curated subset of cmdlets — `Get-DistributionGroupMember`
+only exposes a curated subset of cmdlets. `Get-DistributionGroupMember`
 isn't one of them. A PowerShell Function App with a managed identity
 that has Exchange Recipient Admin role is the smallest extra surface
 that gets us there.
@@ -59,7 +59,7 @@ that gets us there.
 
 ## Pattern
 
-The structural shape mirrors P4 (Forward Trace) — entity trigger,
+The structural shape mirrors P4 (Forward Trace). entity trigger,
 hunting query (Q8), iterate, Take Action, comment-back. Swap the
 hunting-query step for the function call.
 
