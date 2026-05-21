@@ -114,9 +114,13 @@ pilot group so we can observe the system under change before any
 business-wide impact. The current scope:
 
 * Scoped to **3 mailboxes** in our team only.
-* Recipient list documented in our change record (see ticket reference
-  in the change-management system; not embedded here so the list can
-  rotate without doc churn).
+* The 3 mailbox addresses live in this repo's
+  [`inventory/`](./inventory/) folder, not in this doc, so the list
+  can rotate without doc churn. We have not raised a change-management
+  ticket for this pilot; it is an informal test run inside the
+  migration team. If platform maintainers require a CR for the
+  tenant-wide widen, that conversation happens before the widen, not
+  before the pilot.
 * Duration. Intended as a short observation window, not a permanent
   state. Widen to all accepted domains via Phase 1 exit criteria
   before Phase 2 starts.
@@ -234,12 +238,22 @@ Set-EOPProtectionPolicyRule -Identity "Strict Preset Security Policy" -SentTo $n
 Set-ATPProtectionPolicyRule -Identity "Strict Preset Security Policy" -SentTo $null -SentToMemberOf $null
 ```
 
-##### Sign-off
+##### Where this doc sits in the conversation with platform maintainers
 
-This pilot scope was reviewed with platform maintainers and accepted
-on the basis above. Sign-off is recorded in our change-management
-system against the ticket for this rollout. The exit-criteria sign-off
-to widen the scope follows the same path.
+This subsection is the written justification for the pilot scope.
+Platform maintainers flagged the precedence concern after the change
+went in; this section is what we point them at when they ask why
+the preset is overriding our custom policies on those 3 mailboxes.
+It is post-hoc justification, not pre-approved sign-off. We have not
+been through formal change management for the pilot.
+
+What is owed before the tenant-wide widen, not before the pilot:
+
+* If platform maintainers require a CR for the widen, raise one and
+  attach this document as the rationale.
+* Capture the comparison-table results (the five axes above) as the
+  evidence the CR needs.
+* Get the exit-criteria items below ticked in writing.
 
 ### 2.2 Confirm ZAP enabled (default ON; verify)
 
