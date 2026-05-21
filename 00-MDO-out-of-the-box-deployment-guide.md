@@ -109,9 +109,15 @@ in *all domains* → enable.
 #### Pilot scope. Interim state during migration
 
 The end state is the preset applied to all recipients in all accepted
-domains. Until we get there, we scope the preset to a small named
-pilot group so we can observe the system under change before any
-business-wide impact. The current scope:
+domains. Until we get there, we are running a pilot: the preset is
+scoped to a small named group so we can observe the system under
+change before any business-wide impact.
+
+We are still in the pilot. Nothing here describes a completed
+exercise. Numbers come from queries we are running on the pilot set
+now and will keep running until the exit criteria below are met.
+
+The current scope:
 
 * Scoped to **3 mailboxes** in our team only.
 * The 3 mailbox addresses live in this repo's
@@ -129,53 +135,56 @@ business-wide impact. The current scope:
 
 The preset takes precedence over custom anti-phish, anti-spam,
 anti-malware, Safe Links, and Safe Attachments policies for any
-recipient it covers. Platform maintainers have flagged this and they
-are right. The pilot scope is the mitigation. It bounds the blast
-radius of the precedence effect to the 3 mailboxes in scope, which:
+recipient it covers. If platform maintainers raise that as a concern,
+the pilot scope is the answer: it bounds the blast radius of the
+precedence effect to the 3 mailboxes in scope, which:
 
 * All belong to the migration team.
 * Are not VIPs or executives.
 * Have no business-critical inbound flows we cannot afford to lose for
   an hour.
-* Are visible to us hourly during the observation window.
+* Are visible to us hourly while the pilot is running.
 
-##### What the pilot scope buys us
+##### What running the pilot lets us see
 
-* We get to watch how the strict baseline behaves against real
-  inbound mail (quarantine rate, false-positive rate, ZAP retro
-  actions) before we widen.
-* If something surprising happens, the rollback is one PowerShell
+* We can watch how the strict baseline behaves against real inbound
+  mail (quarantine rate, false-positive rate, ZAP retro actions)
+  before we widen.
+* If something surprising shows up, the rollback is one PowerShell
   call (or one portal click) to remove the preset rule scope. The
   three custom-policy-only mailboxes start receiving custom-policy
   treatment again on the next message.
-* We get the parallel-run telemetry the Phase 2 workbook expects from
-  a controlled subset, not a tenant-wide change set.
+* The pilot is feeding the parallel-run telemetry the Phase 2
+  workbook expects, from a controlled subset rather than a
+  tenant-wide change set.
 
 ##### What we accept while the pilot is on
 
-* The 3 pilot mailboxes get preset behaviour, which overrides their
-  custom anti-phish / anti-spam / anti-malware / Safe Links / Safe
-  Attachments policies for the window. This is intentional. Custom
-  policies still apply to every other recipient in the tenant.
+* The 3 pilot mailboxes are receiving preset behaviour, which
+  overrides their custom anti-phish / anti-spam / anti-malware / Safe
+  Links / Safe Attachments policies for the duration of the test.
+  This is intentional. Custom policies still apply to every other
+  recipient in the tenant.
 * If anyone in the rest of the tenant reports a problem, it is not
   the preset (because they are not in scope).
 
-##### The bigger comparison the pilot lets us run
+##### The bigger comparison the pilot is running
 
-Acknowledged: the preset takes precedence over our custom policies for
-any recipient it covers. The pilot is not just a low-risk staging
+The preset takes precedence over our custom policies for any
+recipient it covers. The pilot is not just a low-risk staging
 mechanism. It is also the only way we can compare the preset and our
 custom policy stack head-to-head on real production mail without
 exposing the wider tenant to either side's mistakes.
 
-The two questions we are trying to answer in this window:
+The two questions we are testing during this window:
 
 * **Does the preset actually outperform our custom stack on the cases
   we care about?** Quarantine accuracy, false-positive rate, ZAP retro
-  hit rate, AIR cluster quality. If the preset wins, we widen and
-  retire the overlapping custom policies. If the preset loses on a
-  measurable axis, we keep the relevant custom rule in place for
-  recipients outside the preset scope, and document the exception.
+  hit rate, AIR cluster quality. If the preset wins when the pilot
+  exits, we widen and retire the overlapping custom policies. If the
+  preset loses on a measurable axis, we keep the relevant custom rule
+  in place for recipients outside the preset scope, and document the
+  exception.
 * **What can we still tune on the custom side that the preset cannot
   do?** Anti-phish trusted-sender lists tailored to known internal
   flows, custom impersonation targets for specific VIPs, organisation-
@@ -184,7 +193,7 @@ The two questions we are trying to answer in this window:
   outside the preset's scope; it only prevents them from layering
   on top of preset-covered mailboxes.
 
-What we measure while the pilot is on, on each side:
+What we are measuring while the pilot is on, on each side:
 
 | Axis | How we measure on the preset side | How we measure on the custom side |
 |---|---|---|
@@ -200,10 +209,10 @@ custom policy only for the duration of the pilot. Same role, same
 exposure, no preset. Sized to match the pilot so the comparison is
 honest.
 
-If the preset wins across most axes when the pilot exits, the widen
-is justified on data, not on assumption. If it does not, we record
-the exceptions in [`14-open-questions.md`](./14-open-questions.md),
-keep the relevant custom policies outside the widen scope, and revisit.
+When the pilot exits, the decision is data-driven. If the preset
+wins across most axes, we widen. If it does not, we record the
+exceptions in [`14-open-questions.md`](./14-open-questions.md), keep
+the relevant custom policies outside the widen scope, and revisit.
 
 ##### Exit criteria to widen the scope
 
@@ -240,12 +249,12 @@ Set-ATPProtectionPolicyRule -Identity "Strict Preset Security Policy" -SentTo $n
 
 ##### Where this doc sits in the conversation with platform maintainers
 
-This subsection is the written justification for the pilot scope.
-Platform maintainers flagged the precedence concern after the change
-went in; this section is what we point them at when they ask why
-the preset is overriding our custom policies on those 3 mailboxes.
-It is post-hoc justification, not pre-approved sign-off. We have not
-been through formal change management for the pilot.
+This subsection is the written rationale for the pilot scope. If
+platform maintainers raise the precedence concern, this is what we
+point them at to explain why the preset is overriding our custom
+policies on those 3 mailboxes. It is the running rationale, not a
+pre-approved sign-off, and we have not been through formal change
+management for the pilot.
 
 What is owed before the tenant-wide widen, not before the pilot:
 
@@ -253,7 +262,7 @@ What is owed before the tenant-wide widen, not before the pilot:
   attach this document as the rationale.
 * Capture the comparison-table results (the five axes above) as the
   evidence the CR needs.
-* Get the exit-criteria items below ticked in writing.
+* Get the exit-criteria items above ticked in writing.
 
 ### 2.2 Confirm ZAP enabled (default ON; verify)
 
