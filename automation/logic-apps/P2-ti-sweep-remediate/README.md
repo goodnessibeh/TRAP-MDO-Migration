@@ -14,15 +14,18 @@ Documented in:
 1. **Hourly recurrence** trigger.
 2. **Run hunting query** via Sentinel API. Joins `EmailEvents` ∪
    `EmailAttachmentInfo` ∪ `EmailUrlInfo` against the
-   `ThreatIntelligenceIndicator` table (populated by MDTI / TAXII /
-   MISP). Lookback default 14 days; excludes the last 48h (ZAP covers
-   that natively).
+   `ThreatIntelIndicators` table (the new STIX-aligned TI schema,
+   populated by MDTI / TAXII / MISP). The legacy
+   `ThreatIntelligenceIndicator` table stopped ingesting on
+   2025-07-31, so the query targets the new table and matches on
+   `ObservableKey` / `ObservableValue`. Lookback default 14 days;
+   excludes the last 48h (ZAP covers that natively).
 3. If matches found:
    * Post an **adaptive-card approval** to the SOC's Teams channel
      summarising the count and sample.
-   * On **Approve**. Iterate matches and call the Defender XDR
-     `messages/takeAction` API with `ActionType: SoftDelete` per
-     `NetworkMessageId`. Concurrency capped to 5 to respect API
+   * On **Approve**. Iterate matches and call the Microsoft Graph
+     `analyzedEmails/remediate` API with `action: softDelete` per
+     `{networkMessageId, recipientEmailAddress}` pair. Concurrency capped to 5 to respect API
      throttling.
    * On **Reject**. Record decision and exit.
 4. If no matches found, exit silently (no Teams noise).
@@ -42,10 +45,10 @@ short-circuit. The Teams card only appears for novel detections.
 |---|---|
 | Sentinel workspace + workspace ResourceId | Passed as parameter |
 | `EmailEvents` + `EmailAttachmentInfo` + `EmailUrlInfo` streams enabled on M365 Defender connector | See Phase 1 task #7 |
-| MDTI or TAXII connector populating `ThreatIntelligenceIndicator` | Or import via TI graph API |
+| MDTI or TAXII connector populating `ThreatIntelIndicators` (new STIX TI schema) | Or import via TI Graph API |
 | Teams API connection | For approval card |
 | Sentinel API connection | For hunting query + incident comments |
-| Defender XDR API permission for the Logic App's managed identity | Grant `ThreatHunting.Read.All` + `Mail.ReadWrite` (Defender XDR application permissions) so the HTTP step can call `api.security.microsoft.com/api/messages/takeAction` |
+| Graph API permission for the Logic App's managed identity | Grant `SecurityAnalyzedMessage.ReadWrite.All` (Microsoft Graph application permission) so the HTTP step can call `POST https://graph.microsoft.com/beta/security/collaboration/analyzedEmails/remediate`. The hunting query itself runs through the Microsoft Sentinel API connection, not a Defender app role. **Note:** the remediate endpoint is currently Graph **beta**. |
 
 ## Permissions to grant the Logic App's managed identity
 
@@ -59,17 +62,16 @@ New-AzRoleAssignment -ObjectId $miPid `
   -RoleDefinitionName 'Microsoft Sentinel Responder' `
   -Scope <workspace-resource-id>
 
-# Defender XDR (via Microsoft Graph). Take Action API access
-# Done via Microsoft.Graph PowerShell against the WindowsDefenderATP
-# enterprise app:
-$msi  = Get-MgServicePrincipal -Filter "appId eq '<our-MI-clientId>'"
-$wdat = Get-MgServicePrincipal -Filter "appId eq 'fc780465-2017-40d4-a0c5-307022471b92'"  # WindowsDefenderATP
-$role = $wdat.AppRoles | Where-Object Value -eq 'AdvancedHunting.Read.All'
+# Email remediation via Microsoft Graph (analyzedEmails/remediate, beta).
+# Grant the Graph application role to the playbook's managed identity:
+$msi   = Get-MgServicePrincipal -Filter "appId eq '<our-MI-clientId>'"
+$graph = Get-MgServicePrincipal -Filter "appId eq '00000003-0000-0000-c000-000000000000'"  # Microsoft Graph
+$role  = $graph.AppRoles | Where-Object Value -eq 'SecurityAnalyzedMessage.ReadWrite.All'
 
 New-MgServicePrincipalAppRoleAssignment `
   -ServicePrincipalId $msi.Id `
   -PrincipalId $msi.Id `
-  -ResourceId $wdat.Id `
+  -ResourceId $graph.Id `
   -AppRoleId $role.Id
 ```
 
@@ -102,9 +104,11 @@ New-AzResourceGroupDeployment `
 
 ## Known limits
 
-* `messages/takeAction` is rate-limited to ~300 actions/minute by
-  Microsoft. The repetitions cap of 5 keeps us well under that even
-  on big sweeps.
+* Microsoft Graph throttling applies to `analyzedEmails/remediate`.
+  The repetitions cap of 5 keeps us at a conservative pace even on big
+  sweeps. The endpoint is asynchronous: it returns `202 Accepted` with
+  a `Location` header pointing at the Action center, so the call
+  succeeding means the remediation was queued, not yet completed.
 * The hunting query has a 30-second timeout in the Sentinel API. If
   our environment has very high email volume, narrow the query
   further (e.g. Add `| where ThreatTypes != ''` to limit candidates).

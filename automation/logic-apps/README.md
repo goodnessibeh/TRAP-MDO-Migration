@@ -100,3 +100,31 @@ Every shipped template uses:
   Defender XDR Take Action. No client secrets stored anywhere.
 * **`runAfter` discipline**. Every action has an explicit predecessor;
   the validator catches orphans and broken graphs.
+
+## Email remediation API: primary + GA fallback
+
+Every remediation playbook (P1, P1b, P2, P4, P5, P6) soft-deletes mail by
+calling the Microsoft Graph **beta** action
+`POST /beta/security/collaboration/analyzedEmails/remediate`
+(managed-identity auth, app permission `SecurityAnalyzedMessage.ReadWrite.All`,
+body carries `{networkMessageId, recipientEmailAddress}` pairs). This is the
+documented programmatic remediation surface, but it is beta and Microsoft
+marks it not-for-production.
+
+Because of that, each of those playbooks also ships a **GA fallback**. After
+the Graph call, an `Fallback_GA_ComplianceSearch_purge` action runs **only if
+the primary call `Failed` or `TimedOut`** and only if the optional
+`GaRemediationWebhookUrl` parameter is set. It POSTs the same message set to
+that webhook, which an operator wires to an Azure Automation runbook (or any
+HTTPS endpoint) that performs the GA Security & Compliance path,
+`New-ComplianceSearch` + `New-ComplianceSearchAction -Purge -PurgeType SoftDelete`.
+
+| Tier | Surface | Status | When it runs |
+|---|---|---|---|
+| Primary | Graph `analyzedEmails/remediate` | beta | Always |
+| Fallback | S&C `New-ComplianceSearchAction -Purge` via `GaRemediationWebhookUrl` | GA | Only on primary failure, and only if the webhook URL is set |
+
+Leave `GaRemediationWebhookUrl` empty to disable the fallback (the `If`
+condition short-circuits, so nothing is posted). The runbook is operator-owned
+and not shipped here, because its remediation scope and credentials are a
+SOC-owned decision, consistent with the conservative-defaults posture above.

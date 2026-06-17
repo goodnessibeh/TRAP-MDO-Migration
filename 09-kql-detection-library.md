@@ -154,7 +154,7 @@ let suspected_forwarders = original | distinct RecipientEmailAddress;
 EmailEvents
 | where Timestamp > ago(7d)
 | where SenderFromAddress in (suspected_forwarders)
-| where EmailDirection == "Intraorg"
+| where EmailDirection == "Intra-org"
 | where Subject startswith "Fwd:" or Subject startswith "FW:" or Subject contains target_subject
 | project Timestamp, NetworkMessageId, SenderFromAddress, RecipientEmailAddress,
           Subject, InternetMessageId
@@ -166,7 +166,7 @@ Honest caveats:
 * `Subject` matching on `Fwd:` / `FW:` is heuristic. Some clients localise
   the prefix or strip it entirely. The fallback is a body-fingerprint match
   but `EmailEvents` does not expose body content.
-* `EmailDirection == "Intraorg"` excludes external forwards. We cannot
+* `EmailDirection == "Intra-org"` excludes external forwards. We cannot
   remediate external recipients regardless, but if we want them in the
   result for auditing, drop this filter.
 * The `In-Reply-To` / `References` headers would be the gold-standard
@@ -187,18 +187,19 @@ output drives the TI sweep playbook (Workflow C).
 let lookback = 7d;
 let high_conf_url_iocs = ThreatIntelIndicators
     | where ValidUntil > now()
-    | where ObservableType == "url"
-    | where ConfidenceScore >= 70
-    | distinct ObservableValue, ThreatType, ConfidenceScore;
+    | where ObservableKey == "url:value"
+    | where Confidence >= 70
+    | extend ThreatType = tostring(Data.indicator_types[0])
+    | distinct ObservableValue, ThreatType, Confidence;
 let high_conf_domain_iocs = ThreatIntelIndicators
     | where ValidUntil > now()
-    | where ObservableType in ("domain-name", "hostname")
-    | where ConfidenceScore >= 70
+    | where ObservableKey == "domain-name:value"
+    | where Confidence >= 70
     | distinct ObservableValue;
 let url_hits = EmailUrlInfo
     | where Timestamp > ago(lookback)
     | join kind=inner high_conf_url_iocs on $left.Url == $right.ObservableValue
-    | project Timestamp, NetworkMessageId, Url, ThreatType, ConfidenceScore;
+    | project Timestamp, NetworkMessageId, Url, ThreatType, Confidence;
 let domain_hits = EmailEvents
     | where Timestamp > ago(lookback)
     | extend SenderDomain = tolower(extract(@"@(.+)$", 1, SenderFromAddress))
@@ -321,7 +322,7 @@ EmailEvents
 | where NetworkMessageId == target or InternetMessageId in (
     EmailEvents | where NetworkMessageId == target | distinct InternetMessageId
   )
-| project RecipientEmailAddress, OriginalDeliveryAction, LatestDeliveryAction,
+| project RecipientEmailAddress, DeliveryAction, LatestDeliveryAction,
           DeliveryLocation, LatestDeliveryLocation, RecipientObjectId
 | extend Status = strcat(LatestDeliveryAction, " / ", LatestDeliveryLocation)
 | summarize Recipients = make_set(RecipientEmailAddress) by Status
@@ -403,8 +404,9 @@ when the spike is large enough to worry about.
 let baseline = EmailEvents
     | where Timestamp between (ago(7d) .. ago(1h))
     | where ThreatTypes has "Phish"
-    | summarize HourlyAvg = avg(toreal(count_per_hour))
-        by SenderFromDomain = tolower(extract(@"@(.+)$", 1, SenderFromAddress))
+    | extend SenderFromDomain = tolower(extract(@"@(.+)$", 1, SenderFromAddress))
+    | summarize HourlyCount = count() by SenderFromDomain, bin(Timestamp, 1h)
+    | summarize HourlyAvg = avg(toreal(HourlyCount)) by SenderFromDomain
     ;
 let recent = EmailEvents
     | where Timestamp > ago(1h)

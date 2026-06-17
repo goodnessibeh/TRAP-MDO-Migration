@@ -6,19 +6,52 @@
     "description": "When a malicious message lands on a distribution list, recursively expand the DL membership (via Microsoft Graph's transitive-members endpoint, no Function App required) and call Defender XDR Take Action per resolved member. Conservative defaults: only fires for explicit DL entities on the incident; soft-delete; warns if expanded membership exceeds 500. Documented in 09-kql-detection-library.md Q8 and 10-logic-apps-playbook-library.md P5.",
     "prerequisites": "Sentinel workspace; Defender XDR Take Action API for the Logic App MI; Microsoft Graph Group.Read.All application permission on the MI; the DL must be synced to Microsoft Entra (cloud-managed). Pure on-prem DLs need a separate EXO PowerShell path - not implemented here.",
     "lastUpdate": "2026-05-20",
-    "entities": ["MailMessage", "MailCluster"],
-    "tags": ["TRAP-MDO-Migration", "Phase-3", "P5", "DL", "Graph"]
+    "entities": [
+      "MailMessage",
+      "MailCluster"
+    ],
+    "tags": [
+      "TRAP-MDO-Migration",
+      "Phase-3",
+      "P5",
+      "DL",
+      "Graph"
+    ]
   },
   "parameters": {
-    "PlaybookName":           { "type": "string", "defaultValue": "trap-mdo-P5-dl-expand-remediate" },
-    "SentinelConnectionName": { "type": "string", "defaultValue": "azuresentinel" },
-    "WorkspaceResourceId":    { "type": "string" },
-    "MaxMembers":             { "type": "int", "defaultValue": 500, "metadata": { "description": "Safety cap - if a DL has more members than this, the playbook bails and posts a warning instead of remediating." } },
-    "Location":               { "type": "string", "defaultValue": "[resourceGroup().location]" }
+    "PlaybookName": {
+      "type": "string",
+      "defaultValue": "trap-mdo-P5-dl-expand-remediate"
+    },
+    "SentinelConnectionName": {
+      "type": "string",
+      "defaultValue": "azuresentinel"
+    },
+    "WorkspaceResourceId": {
+      "type": "string"
+    },
+    "MaxMembers": {
+      "type": "int",
+      "defaultValue": 500,
+      "metadata": {
+        "description": "Safety cap - if a DL has more members than this, the playbook bails and posts a warning instead of remediating."
+      }
+    },
+    "Location": {
+      "type": "string",
+      "defaultValue": "[resourceGroup().location]"
+    },
+    "GaRemediationWebhookUrl": {
+      "type": "string",
+      "defaultValue": "",
+      "metadata": {
+        "description": "Optional HTTPS webhook (e.g. an Azure Automation runbook) that performs the GA Security & Compliance remediation (New-ComplianceSearchAction -Purge). Called only if the Graph beta remediate call fails. Leave empty to disable the fallback."
+      }
+    }
   },
   "variables": {
     "sentinelConnId": "[resourceId('Microsoft.Web/connections', parameters('SentinelConnectionName'))]",
-    "sentinelApi":    "[concat('/subscriptions/', subscription().subscriptionId, '/providers/Microsoft.Web/locations/', parameters('Location'), '/managedApis/azuresentinel')]"
+    "sentinelApi": "[concat('/subscriptions/', subscription().subscriptionId, '/providers/Microsoft.Web/locations/', parameters('Location'), '/managedApis/azuresentinel')]"
   },
   "resources": [
     {
@@ -26,23 +59,44 @@
       "apiVersion": "2019-05-01",
       "name": "[parameters('PlaybookName')]",
       "location": "[parameters('Location')]",
-      "identity": { "type": "SystemAssigned" },
+      "identity": {
+        "type": "SystemAssigned"
+      },
       "properties": {
         "state": "Enabled",
         "definition": {
           "$schema": "https://schema.management.azure.com/providers/Microsoft.Logic/schemas/2016-06-01/workflowdefinition.json#",
           "contentVersion": "1.0.0.0",
           "parameters": {
-            "$connections":        { "type": "Object", "defaultValue": {} },
-            "WorkspaceResourceId": { "type": "String", "defaultValue": "[parameters('WorkspaceResourceId')]" },
-            "MaxMembers":          { "type": "Int", "defaultValue": "[parameters('MaxMembers')]" }
+            "$connections": {
+              "type": "Object",
+              "defaultValue": {}
+            },
+            "WorkspaceResourceId": {
+              "type": "String",
+              "defaultValue": "[parameters('WorkspaceResourceId')]"
+            },
+            "MaxMembers": {
+              "type": "Int",
+              "defaultValue": "[parameters('MaxMembers')]"
+            },
+            "GaRemediationWebhookUrl": {
+              "type": "String",
+              "defaultValue": "[parameters('GaRemediationWebhookUrl')]"
+            }
           },
           "triggers": {
             "Microsoft_Sentinel_incident_trigger": {
               "type": "ApiConnectionWebhook",
               "inputs": {
-                "host": { "connection": { "name": "@parameters('$connections')['azuresentinel']['connectionId']" } },
-                "body": { "callback_url": "@listCallbackUrl()" },
+                "host": {
+                  "connection": {
+                    "name": "@parameters('$connections')['azuresentinel']['connectionId']"
+                  }
+                },
+                "body": {
+                  "callback_url": "@listCallbackUrl()"
+                },
                 "path": "/incident-creation"
               }
             }
@@ -52,7 +106,11 @@
               "type": "ApiConnection",
               "runAfter": {},
               "inputs": {
-                "host": { "connection": { "name": "@parameters('$connections')['azuresentinel']['connectionId']" } },
+                "host": {
+                  "connection": {
+                    "name": "@parameters('$connections')['azuresentinel']['connectionId']"
+                  }
+                },
                 "method": "post",
                 "path": "/Queries",
                 "body": {
@@ -64,8 +122,21 @@
             },
             "Any_DLs_present": {
               "type": "If",
-              "runAfter": { "Get_DL_recipients_from_query": [ "Succeeded" ] },
-              "expression": { "and": [ { "greater": [ "@length(body('Get_DL_recipients_from_query')?['tables']?[0]?['rows'])", 0 ] } ] },
+              "runAfter": {
+                "Get_DL_recipients_from_query": [
+                  "Succeeded"
+                ]
+              },
+              "expression": {
+                "and": [
+                  {
+                    "greater": [
+                      "@length(body('Get_DL_recipients_from_query')?['tables']?[0]?['rows'])",
+                      0
+                    ]
+                  }
+                ]
+              },
               "actions": {
                 "For_each_DL": {
                   "type": "Foreach",
@@ -76,19 +147,41 @@
                       "inputs": {
                         "method": "GET",
                         "uri": "https://graph.microsoft.com/v1.0/groups/@{items('For_each_DL')[1]}/transitiveMembers?$select=id,userPrincipalName,mail&$count=true&$top=999",
-                        "headers": { "ConsistencyLevel": "eventual" },
-                        "authentication": { "type": "ManagedServiceIdentity", "audience": "https://graph.microsoft.com" }
+                        "headers": {
+                          "ConsistencyLevel": "eventual"
+                        },
+                        "authentication": {
+                          "type": "ManagedServiceIdentity",
+                          "audience": "https://graph.microsoft.com"
+                        }
                       }
                     },
                     "Bail_if_oversized": {
                       "type": "If",
-                      "runAfter": { "Graph_transitive_members": [ "Succeeded" ] },
-                      "expression": { "and": [ { "greater": [ "@coalesce(body('Graph_transitive_members')?['@odata.count'], 0)", "@parameters('MaxMembers')" ] } ] },
+                      "runAfter": {
+                        "Graph_transitive_members": [
+                          "Succeeded"
+                        ]
+                      },
+                      "expression": {
+                        "and": [
+                          {
+                            "greater": [
+                              "@coalesce(body('Graph_transitive_members')?['@odata.count'], 0)",
+                              "@parameters('MaxMembers')"
+                            ]
+                          }
+                        ]
+                      },
                       "actions": {
                         "Comment_oversized": {
                           "type": "ApiConnection",
                           "inputs": {
-                            "host": { "connection": { "name": "@parameters('$connections')['azuresentinel']['connectionId']" } },
+                            "host": {
+                              "connection": {
+                                "name": "@parameters('$connections')['azuresentinel']['connectionId']"
+                              }
+                            },
                             "method": "post",
                             "path": "/Incidents/Comment",
                             "body": {
@@ -103,7 +196,11 @@
                           "Run_per_recipient_query": {
                             "type": "ApiConnection",
                             "inputs": {
-                              "host": { "connection": { "name": "@parameters('$connections')['azuresentinel']['connectionId']" } },
+                              "host": {
+                                "connection": {
+                                  "name": "@parameters('$connections')['azuresentinel']['connectionId']"
+                                }
+                              },
                               "method": "post",
                               "path": "/Queries",
                               "body": {
@@ -115,31 +212,106 @@
                           },
                           "For_each_resolved_message": {
                             "type": "Foreach",
-                            "runAfter": { "Run_per_recipient_query": [ "Succeeded" ] },
+                            "runAfter": {
+                              "Run_per_recipient_query": [
+                                "Succeeded"
+                              ]
+                            },
                             "foreach": "@body('Run_per_recipient_query')?['tables']?[0]?['rows']",
                             "actions": {
                               "Call_TakeAction_per_member": {
                                 "type": "Http",
                                 "inputs": {
                                   "method": "POST",
-                                  "uri": "https://api.security.microsoft.com/api/messages/takeAction",
-                                  "headers": { "Content-Type": "application/json" },
-                                  "authentication": { "type": "ManagedServiceIdentity", "audience": "https://api.security.microsoft.com" },
+                                  "uri": "https://graph.microsoft.com/beta/security/collaboration/analyzedEmails/remediate",
+                                  "headers": {
+                                    "Content-Type": "application/json"
+                                  },
+                                  "authentication": {
+                                    "type": "ManagedServiceIdentity",
+                                    "audience": "https://graph.microsoft.com"
+                                  },
                                   "body": {
-                                    "NetworkMessageIds": [ "@items('For_each_resolved_message')[0]" ],
-                                    "ActionType": "SoftDelete",
-                                    "Justification": "P5 DL-expand remediation for DL @{items('For_each_DL')[0]}"
+                                    "displayName": "P5 DL-expand remediation",
+                                    "description": "P5 DL-expand remediation for DL @{items('For_each_DL')[0]}",
+                                    "severity": "high",
+                                    "action": "softDelete",
+                                    "remediateSendersCopy": false,
+                                    "analyzedEmails": [
+                                      {
+                                        "networkMessageId": "@items('For_each_resolved_message')[0]",
+                                        "recipientEmailAddress": "@items('For_each_resolved_message')[1]"
+                                      }
+                                    ]
                                   }
                                 },
-                                "runtimeConfiguration": { "concurrency": { "repetitions": 5 } }
+                                "runtimeConfiguration": {
+                                  "concurrency": {
+                                    "repetitions": 5
+                                  }
+                                }
+                              },
+                              "Fallback_GA_ComplianceSearch_purge": {
+                                "type": "If",
+                                "runAfter": {
+                                  "Call_TakeAction_per_member": [
+                                    "Failed",
+                                    "TimedOut"
+                                  ]
+                                },
+                                "expression": {
+                                  "and": [
+                                    {
+                                      "not": {
+                                        "equals": [
+                                          "@parameters('GaRemediationWebhookUrl')",
+                                          ""
+                                        ]
+                                      }
+                                    }
+                                  ]
+                                },
+                                "actions": {
+                                  "Post_GA_purge_request": {
+                                    "type": "Http",
+                                    "inputs": {
+                                      "method": "POST",
+                                      "uri": "@parameters('GaRemediationWebhookUrl')",
+                                      "headers": {
+                                        "Content-Type": "application/json"
+                                      },
+                                      "body": {
+                                        "method": "ComplianceSearchAction-Purge",
+                                        "purgeType": "SoftDelete",
+                                        "reason": "GA fallback after Graph beta remediate failed in P5-dl-expand-remediate",
+                                        "action": "softDelete",
+                                        "displayName": "P5 DL-expand remediation",
+                                        "analyzedEmails": [
+                                          {
+                                            "networkMessageId": "@items('For_each_resolved_message')[0]",
+                                            "recipientEmailAddress": "@items('For_each_resolved_message')[1]"
+                                          }
+                                        ]
+                                      }
+                                    }
+                                  }
+                                }
                               }
                             }
                           },
                           "Comment_expanded": {
                             "type": "ApiConnection",
-                            "runAfter": { "For_each_resolved_message": [ "Succeeded" ] },
+                            "runAfter": {
+                              "For_each_resolved_message": [
+                                "Succeeded"
+                              ]
+                            },
                             "inputs": {
-                              "host": { "connection": { "name": "@parameters('$connections')['azuresentinel']['connectionId']" } },
+                              "host": {
+                                "connection": {
+                                  "name": "@parameters('$connections')['azuresentinel']['connectionId']"
+                                }
+                              },
                               "method": "post",
                               "path": "/Incidents/Comment",
                               "body": {
@@ -159,7 +331,11 @@
                   "Comment_no_DL": {
                     "type": "ApiConnection",
                     "inputs": {
-                      "host": { "connection": { "name": "@parameters('$connections')['azuresentinel']['connectionId']" } },
+                      "host": {
+                        "connection": {
+                          "name": "@parameters('$connections')['azuresentinel']['connectionId']"
+                        }
+                      },
                       "method": "post",
                       "path": "/Incidents/Comment",
                       "body": {
@@ -177,7 +353,11 @@
         "parameters": {
           "$connections": {
             "value": {
-              "azuresentinel": { "connectionId": "[variables('sentinelConnId')]", "connectionName": "[parameters('SentinelConnectionName')]", "id": "[variables('sentinelApi')]" }
+              "azuresentinel": {
+                "connectionId": "[variables('sentinelConnId')]",
+                "connectionName": "[parameters('SentinelConnectionName')]",
+                "id": "[variables('sentinelApi')]"
+              }
             }
           }
         }
@@ -185,7 +365,13 @@
     }
   ],
   "outputs": {
-    "playbookName": { "type": "string", "value": "[parameters('PlaybookName')]" },
-    "managedIdentityPrincipalId": { "type": "string", "value": "[reference(resourceId('Microsoft.Logic/workflows', parameters('PlaybookName')), '2019-05-01', 'Full').identity.principalId]" }
+    "playbookName": {
+      "type": "string",
+      "value": "[parameters('PlaybookName')]"
+    },
+    "managedIdentityPrincipalId": {
+      "type": "string",
+      "value": "[reference(resourceId('Microsoft.Logic/workflows', parameters('PlaybookName')), '2019-05-01', 'Full').identity.principalId]"
+    }
   }
 }

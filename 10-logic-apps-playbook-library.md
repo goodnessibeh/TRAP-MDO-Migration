@@ -216,7 +216,7 @@ This is the OOTB deployment playbook. Documented in
    3b. Add comment to incident: forwarded message remediated
 
 4. HTTP+MI POST /security/runHuntingQuery
-   Query: external-forward detection (subset of Q4 with EmailDirection != "Intraorg")
+   Query: external-forward detection (subset of Q4 with EmailDirection != "Intra-org")
 
 5. If external forwards found:
    Send Teams adaptive card to SOC: "External forward detected,

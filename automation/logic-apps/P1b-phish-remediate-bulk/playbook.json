@@ -3,17 +3,47 @@
   "contentVersion": "1.0.0.0",
   "metadata": {
     "title": "P1b - Phish-Remediate-Bulk (pagination helper)",
-    "description": "HTTP-triggered helper called by P1 (or any other playbook) when the NetworkMessageId set is larger than the Defender XDR rate limit can absorb in one shot. Chunks the input array into pages of 50 and calls api/messages/takeAction per page with a 12-second inter-page delay to stay under the 300/min cap. Returns per-page status. Documented in 10-logic-apps-playbook-library.md P1b.",
-    "prerequisites": "Defender XDR Take Action API access for the Logic App MI; HTTP-callable from P1.",
+    "description": "HTTP-triggered helper called by P1 (or any other playbook) when the email set is larger than is comfortable to remediate in one shot. Chunks the input analyzedEmails array into pages of 50 and calls the Microsoft Graph analyzedEmails/remediate endpoint per page with a 12-second inter-page delay to stay well under Graph throttling. Returns per-page status. Documented in 10-logic-apps-playbook-library.md P1b.",
+    "prerequisites": "Graph application permission SecurityAnalyzedMessage.ReadWrite.All granted to the Logic App MI; HTTP-callable from P1.",
     "lastUpdate": "2026-05-20",
     "entities": [],
-    "tags": ["TRAP-MDO-Migration", "Phase-3", "P1b", "Paginator"]
+    "tags": [
+      "TRAP-MDO-Migration",
+      "Phase-3",
+      "P1b",
+      "Paginator"
+    ]
   },
   "parameters": {
-    "PlaybookName": { "type": "string", "defaultValue": "trap-mdo-P1b-phish-remediate-bulk" },
-    "ChunkSize":    { "type": "int",    "defaultValue": 50,  "metadata": { "description": "Max NetworkMessageIds per Take Action call. 50 is the Defender API recommendation." } },
-    "DelaySeconds": { "type": "int",    "defaultValue": 12,  "metadata": { "description": "Wait between chunks. With chunk=50 and delay=12s, throughput is ~250/min, under the 300/min ceiling." } },
-    "Location":     { "type": "string", "defaultValue": "[resourceGroup().location]" }
+    "PlaybookName": {
+      "type": "string",
+      "defaultValue": "trap-mdo-P1b-phish-remediate-bulk"
+    },
+    "ChunkSize": {
+      "type": "int",
+      "defaultValue": 50,
+      "metadata": {
+        "description": "Max emails (analyzedEmails entries) per remediate call. 50 keeps each Graph request well-sized."
+      }
+    },
+    "DelaySeconds": {
+      "type": "int",
+      "defaultValue": 12,
+      "metadata": {
+        "description": "Wait between chunks. With chunk=50 and delay=12s, throughput is ~250/min, a deliberately conservative pace under Graph throttling."
+      }
+    },
+    "Location": {
+      "type": "string",
+      "defaultValue": "[resourceGroup().location]"
+    },
+    "GaRemediationWebhookUrl": {
+      "type": "string",
+      "defaultValue": "",
+      "metadata": {
+        "description": "Optional HTTPS webhook (e.g. an Azure Automation runbook) that performs the GA Security & Compliance remediation (New-ComplianceSearchAction -Purge). Called only if the Graph beta remediate call fails. Leave empty to disable the fallback."
+      }
+    }
   },
   "variables": {},
   "resources": [
@@ -22,16 +52,31 @@
       "apiVersion": "2019-05-01",
       "name": "[parameters('PlaybookName')]",
       "location": "[parameters('Location')]",
-      "identity": { "type": "SystemAssigned" },
+      "identity": {
+        "type": "SystemAssigned"
+      },
       "properties": {
         "state": "Enabled",
         "definition": {
           "$schema": "https://schema.management.azure.com/providers/Microsoft.Logic/schemas/2016-06-01/workflowdefinition.json#",
           "contentVersion": "1.0.0.0",
           "parameters": {
-            "$connections": { "type": "Object", "defaultValue": {} },
-            "ChunkSize":    { "type": "Int", "defaultValue": "[parameters('ChunkSize')]" },
-            "DelaySeconds": { "type": "Int", "defaultValue": "[parameters('DelaySeconds')]" }
+            "$connections": {
+              "type": "Object",
+              "defaultValue": {}
+            },
+            "ChunkSize": {
+              "type": "Int",
+              "defaultValue": "[parameters('ChunkSize')]"
+            },
+            "DelaySeconds": {
+              "type": "Int",
+              "defaultValue": "[parameters('DelaySeconds')]"
+            },
+            "GaRemediationWebhookUrl": {
+              "type": "String",
+              "defaultValue": "[parameters('GaRemediationWebhookUrl')]"
+            }
           },
           "triggers": {
             "manual": {
@@ -41,11 +86,45 @@
                 "method": "POST",
                 "schema": {
                   "type": "object",
-                  "required": [ "networkMessageIds" ],
+                  "required": [
+                    "analyzedEmails"
+                  ],
                   "properties": {
-                    "networkMessageIds": { "type": "array", "items": { "type": "string" } },
-                    "actionType":        { "type": "string", "enum": [ "SoftDelete", "MoveToInbox", "MoveToJunk", "MoveToDeletedItems" ], "default": "SoftDelete" },
-                    "justification":     { "type": "string" }
+                    "analyzedEmails": {
+                      "type": "array",
+                      "items": {
+                        "type": "object",
+                        "required": [
+                          "networkMessageId",
+                          "recipientEmailAddress"
+                        ],
+                        "properties": {
+                          "networkMessageId": {
+                            "type": "string"
+                          },
+                          "recipientEmailAddress": {
+                            "type": "string"
+                          }
+                        }
+                      }
+                    },
+                    "action": {
+                      "type": "string",
+                      "enum": [
+                        "softDelete",
+                        "moveToInbox",
+                        "moveToJunk",
+                        "moveToDeletedItems",
+                        "hardDelete"
+                      ],
+                      "default": "softDelete"
+                    },
+                    "displayName": {
+                      "type": "string"
+                    },
+                    "description": {
+                      "type": "string"
+                    }
                   }
                 }
               }
@@ -55,75 +134,194 @@
             "Initialize_Index": {
               "type": "InitializeVariable",
               "runAfter": {},
-              "inputs": { "variables": [ { "name": "ChunkStart", "type": "Integer", "value": 0 } ] }
+              "inputs": {
+                "variables": [
+                  {
+                    "name": "ChunkStart",
+                    "type": "Integer",
+                    "value": 0
+                  }
+                ]
+              }
             },
             "Initialize_Total": {
               "type": "InitializeVariable",
-              "runAfter": { "Initialize_Index": [ "Succeeded" ] },
-              "inputs": { "variables": [ { "name": "TotalIds", "type": "Integer", "value": "@length(triggerBody()?['networkMessageIds'])" } ] }
+              "runAfter": {
+                "Initialize_Index": [
+                  "Succeeded"
+                ]
+              },
+              "inputs": {
+                "variables": [
+                  {
+                    "name": "TotalIds",
+                    "type": "Integer",
+                    "value": "@length(triggerBody()?['analyzedEmails'])"
+                  }
+                ]
+              }
             },
             "Initialize_Results": {
               "type": "InitializeVariable",
-              "runAfter": { "Initialize_Total": [ "Succeeded" ] },
-              "inputs": { "variables": [ { "name": "PageResults", "type": "Array", "value": [] } ] }
+              "runAfter": {
+                "Initialize_Total": [
+                  "Succeeded"
+                ]
+              },
+              "inputs": {
+                "variables": [
+                  {
+                    "name": "PageResults",
+                    "type": "Array",
+                    "value": []
+                  }
+                ]
+              }
             },
             "Process_chunks": {
               "type": "Until",
-              "runAfter": { "Initialize_Results": [ "Succeeded" ] },
+              "runAfter": {
+                "Initialize_Results": [
+                  "Succeeded"
+                ]
+              },
               "expression": "@greaterOrEquals(variables('ChunkStart'), variables('TotalIds'))",
-              "limit": { "count": 500, "timeout": "PT4H" },
+              "limit": {
+                "count": 500,
+                "timeout": "PT4H"
+              },
               "actions": {
                 "Slice_chunk": {
                   "type": "Compose",
-                  "inputs": "@take(skip(triggerBody()?['networkMessageIds'], variables('ChunkStart')), parameters('ChunkSize'))"
+                  "inputs": "@take(skip(triggerBody()?['analyzedEmails'], variables('ChunkStart')), parameters('ChunkSize'))"
                 },
                 "Call_TakeAction": {
                   "type": "Http",
-                  "runAfter": { "Slice_chunk": [ "Succeeded" ] },
+                  "runAfter": {
+                    "Slice_chunk": [
+                      "Succeeded"
+                    ]
+                  },
                   "inputs": {
                     "method": "POST",
-                    "uri": "https://api.security.microsoft.com/api/messages/takeAction",
-                    "headers": { "Content-Type": "application/json" },
-                    "authentication": { "type": "ManagedServiceIdentity", "audience": "https://api.security.microsoft.com" },
+                    "uri": "https://graph.microsoft.com/beta/security/collaboration/analyzedEmails/remediate",
+                    "headers": {
+                      "Content-Type": "application/json"
+                    },
+                    "authentication": {
+                      "type": "ManagedServiceIdentity",
+                      "audience": "https://graph.microsoft.com"
+                    },
                     "body": {
-                      "NetworkMessageIds": "@outputs('Slice_chunk')",
-                      "ActionType":        "@coalesce(triggerBody()?['actionType'], 'SoftDelete')",
-                      "Justification":     "@coalesce(triggerBody()?['justification'], 'P1b bulk remediation')"
+                      "displayName": "@coalesce(triggerBody()?['displayName'], 'P1b bulk remediation')",
+                      "description": "@coalesce(triggerBody()?['description'], 'P1b bulk remediation')",
+                      "severity": "high",
+                      "action": "@coalesce(triggerBody()?['action'], 'softDelete')",
+                      "remediateSendersCopy": false,
+                      "analyzedEmails": "@outputs('Slice_chunk')"
                     }
                   }
                 },
                 "Append_result": {
                   "type": "AppendToArrayVariable",
-                  "runAfter": { "Call_TakeAction": [ "Succeeded", "Failed" ] },
+                  "runAfter": {
+                    "Call_TakeAction": [
+                      "Succeeded",
+                      "Failed"
+                    ]
+                  },
                   "inputs": {
                     "name": "PageResults",
                     "value": {
                       "chunkStart": "@variables('ChunkStart')",
-                      "chunkSize":  "@length(outputs('Slice_chunk'))",
-                      "status":     "@outputs('Call_TakeAction')?['statusCode']"
+                      "chunkSize": "@length(outputs('Slice_chunk'))",
+                      "status": "@outputs('Call_TakeAction')?['statusCode']"
                     }
                   }
                 },
                 "Advance_index": {
                   "type": "IncrementVariable",
-                  "runAfter": { "Append_result": [ "Succeeded" ] },
-                  "inputs": { "name": "ChunkStart", "value": "@parameters('ChunkSize')" }
+                  "runAfter": {
+                    "Append_result": [
+                      "Succeeded"
+                    ]
+                  },
+                  "inputs": {
+                    "name": "ChunkStart",
+                    "value": "@parameters('ChunkSize')"
+                  }
                 },
                 "Delay_between_chunks": {
                   "type": "Wait",
-                  "runAfter": { "Advance_index": [ "Succeeded" ] },
-                  "inputs": { "interval": { "count": "@parameters('DelaySeconds')", "unit": "Second" } }
+                  "runAfter": {
+                    "Advance_index": [
+                      "Succeeded"
+                    ]
+                  },
+                  "inputs": {
+                    "interval": {
+                      "count": "@parameters('DelaySeconds')",
+                      "unit": "Second"
+                    }
+                  }
+                },
+                "Fallback_GA_ComplianceSearch_purge": {
+                  "type": "If",
+                  "runAfter": {
+                    "Call_TakeAction": [
+                      "Failed",
+                      "TimedOut"
+                    ]
+                  },
+                  "expression": {
+                    "and": [
+                      {
+                        "not": {
+                          "equals": [
+                            "@parameters('GaRemediationWebhookUrl')",
+                            ""
+                          ]
+                        }
+                      }
+                    ]
+                  },
+                  "actions": {
+                    "Post_GA_purge_request": {
+                      "type": "Http",
+                      "inputs": {
+                        "method": "POST",
+                        "uri": "@parameters('GaRemediationWebhookUrl')",
+                        "headers": {
+                          "Content-Type": "application/json"
+                        },
+                        "body": {
+                          "method": "ComplianceSearchAction-Purge",
+                          "purgeType": "SoftDelete",
+                          "reason": "GA fallback after Graph beta remediate failed in P1b-phish-remediate-bulk",
+                          "action": "@coalesce(triggerBody()?['action'], 'softDelete')",
+                          "displayName": "@coalesce(triggerBody()?['displayName'], 'P1b bulk remediation')",
+                          "analyzedEmails": "@outputs('Slice_chunk')"
+                        }
+                      }
+                    }
+                  }
                 }
               }
             },
             "Respond_with_results": {
               "type": "Response",
-              "runAfter": { "Process_chunks": [ "Succeeded", "Failed", "TimedOut" ] },
+              "runAfter": {
+                "Process_chunks": [
+                  "Succeeded",
+                  "Failed",
+                  "TimedOut"
+                ]
+              },
               "inputs": {
                 "statusCode": 200,
                 "body": {
                   "totalProcessed": "@variables('TotalIds')",
-                  "chunks":         "@variables('PageResults')"
+                  "chunks": "@variables('PageResults')"
                 }
               }
             }
@@ -131,14 +329,25 @@
           "outputs": {}
         },
         "parameters": {
-          "$connections": { "value": {} }
+          "$connections": {
+            "value": {}
+          }
         }
       }
     }
   ],
   "outputs": {
-    "playbookName":              { "type": "string", "value": "[parameters('PlaybookName')]" },
-    "callbackUrl":                { "type": "string", "value": "[listCallbackURL(concat(resourceId('Microsoft.Logic/workflows', parameters('PlaybookName')), '/triggers/manual'), '2019-05-01').value]" },
-    "managedIdentityPrincipalId": { "type": "string", "value": "[reference(resourceId('Microsoft.Logic/workflows', parameters('PlaybookName')), '2019-05-01', 'Full').identity.principalId]" }
+    "playbookName": {
+      "type": "string",
+      "value": "[parameters('PlaybookName')]"
+    },
+    "callbackUrl": {
+      "type": "string",
+      "value": "[listCallbackURL(concat(resourceId('Microsoft.Logic/workflows', parameters('PlaybookName')), '/triggers/manual'), '2019-05-01').value]"
+    },
+    "managedIdentityPrincipalId": {
+      "type": "string",
+      "value": "[reference(resourceId('Microsoft.Logic/workflows', parameters('PlaybookName')), '2019-05-01', 'Full').identity.principalId]"
+    }
   }
 }

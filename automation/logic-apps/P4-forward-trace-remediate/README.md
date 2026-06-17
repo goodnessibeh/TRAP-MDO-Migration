@@ -18,10 +18,10 @@ Documented in:
 2. Run a hunting query (Q4 internal-forward tracking) using
    `Subject` + `SenderFromAddress` of the original message; gather
    every same-subject same-sender copy in the last 14 days.
-3. Split results into `Intraorg` (internal forwards) vs `Inbound`
+3. Split results into `Intra-org` (internal forwards) vs `Inbound`
    (external. out of reach).
 4. For internal copies: call Defender XDR
-   `api/messages/takeAction` with `SoftDelete` per `NetworkMessageId`.
+   the Graph `analyzedEmails/remediate` API with `action: softDelete` per `{networkMessageId, recipientEmailAddress}`.
 5. For external copies: post a Teams adaptive notification to the SOC
    channel with the recipient list and the recommendation to block at
    the receiving organisation. No remediation attempted; this is a
@@ -40,7 +40,7 @@ an automation rule.
 | Item | Notes |
 |---|---|
 | Sentinel workspace + `EmailEvents` stream | Phase 1 |
-| Defender XDR API permission for the Logic App MI | `AdvancedHunting.Read.All` + `Mail.ReadWrite` |
+| Graph API permission for the Logic App MI | `SecurityAnalyzedMessage.ReadWrite.All` (for the `analyzedEmails/remediate` call; Graph **beta**). The hunting query runs via the Sentinel API connection. |
 | Sentinel + Teams API connections | Standard |
 | Q4 KQL implemented as a hunting query in the Sentinel workspace | Not strictly required. The playbook embeds the same query inline |
 
@@ -53,8 +53,8 @@ $miPid = '<principalId from deployment output>'
 New-AzRoleAssignment -ObjectId $miPid `
   -RoleDefinitionName 'Microsoft Sentinel Responder' -Scope <workspace-resource-id>
 
-# Defender XDR. Take Action API
-# See P2 README for the WindowsDefenderATP role assignment recipe.
+# Email remediation via Microsoft Graph (analyzedEmails/remediate, beta).
+# See P2 README for the SecurityAnalyzedMessage.ReadWrite.All grant recipe.
 ```
 
 ## Deploy

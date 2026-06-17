@@ -6,8 +6,18 @@
     "description": "Periodically sweeps EmailEvents against a Sentinel threat intelligence watchlist or the Microsoft Defender Threat Intelligence (MDTI) connector, identifying messages older than ZAP's 48h window that should now be remediated based on fresh TI. For matched messages, opens an approval card in Teams and (on approval) calls Defender XDR Take Action to soft-delete. This closes the single biggest TRAP-vs-MDO gap that Phase 2 surfaces. Documented in 09-kql-detection-library.md Q5 and 10-logic-apps-playbook-library.md P2.",
     "prerequisites": "Sentinel workspace; EmailEvents stream enabled on M365 Defender connector; Defender XDR Take Action permissions (Search and Purge role); Teams Posts API connection for approval card; managed identity granted Microsoft Sentinel Contributor + Microsoft Sentinel Responder on the workspace.",
     "lastUpdate": "2026-05-20",
-    "entities": ["MailMessage", "Account"],
-    "tags": ["TRAP-MDO-Migration", "Phase-2", "P2", "TI", "Sweep", "Take-Action"]
+    "entities": [
+      "MailMessage",
+      "Account"
+    ],
+    "tags": [
+      "TRAP-MDO-Migration",
+      "Phase-2",
+      "P2",
+      "TI",
+      "Sweep",
+      "Take-Action"
+    ]
   },
   "parameters": {
     "PlaybookName": {
@@ -56,6 +66,13 @@
     "Location": {
       "type": "string",
       "defaultValue": "[resourceGroup().location]"
+    },
+    "GaRemediationWebhookUrl": {
+      "type": "string",
+      "defaultValue": "",
+      "metadata": {
+        "description": "Optional HTTPS webhook (e.g. an Azure Automation runbook) that performs the GA Security & Compliance remediation (New-ComplianceSearchAction -Purge). Called only if the Graph beta remediate call fails. Leave empty to disable the fallback."
+      }
     }
   },
   "variables": {
@@ -102,6 +119,10 @@
             "LookbackDays": {
               "type": "Int",
               "defaultValue": "[parameters('LookbackDays')]"
+            },
+            "GaRemediationWebhookUrl": {
+              "type": "String",
+              "defaultValue": "[parameters('GaRemediationWebhookUrl')]"
             }
           },
           "triggers": {
@@ -127,7 +148,7 @@
                 "path": "/Queries",
                 "body": {
                   "workspaceResourceId": "@parameters('WorkspaceResourceId')",
-                  "query": "let lookback = @{parameters('LookbackDays')}d;\nlet TI = ThreatIntelligenceIndicator\n    | where TimeGenerated > ago(7d)\n    | where Active == true\n    | where isnotempty(NetworkSourceAddress) or isnotempty(Url) or isnotempty(DomainName) or isnotempty(EmailSenderAddress) or isnotempty(FileHashValue)\n    | project SenderIp = NetworkSourceAddress, Url, DomainName, SenderEmail = EmailSenderAddress, Sha256 = FileHashValue, IndicatorType = Type, Description, ConfidenceScore;\nEmailEvents\n| where TimeGenerated > ago(lookback) and TimeGenerated < ago(2d)\n| where EmailDirection == 'Inbound'\n| where DeliveryAction == 'Delivered'\n| join kind=inner (EmailAttachmentInfo | where TimeGenerated > ago(lookback) | project NetworkMessageId, FileType, SHA256) on NetworkMessageId\n| join kind=leftouter (EmailUrlInfo | where TimeGenerated > ago(lookback) | project NetworkMessageId, UrlDomain = parse_url(Url).Host, Url) on NetworkMessageId\n| extend match = case(\n    SenderFromAddress in (TI | project SenderEmail), 'sender',\n    UrlDomain in (TI | project DomainName), 'url-domain',\n    Url in (TI | project Url), 'url-exact',\n    SHA256 in (TI | project Sha256), 'attachment-sha256',\n    SenderIPv4 in (TI | project SenderIp), 'sender-ip',\n    '')\n| where match != ''\n| project Timestamp, NetworkMessageId, RecipientEmailAddress, SenderFromAddress, Subject, match",
+                  "query": "let lookback = @{parameters('LookbackDays')}d;\nlet TI = ThreatIntelIndicators\n    | where TimeGenerated > ago(30d)\n    | where IsActive == true\n    | project ObservableKey, ObservableValue;\nlet ti_senders = TI | where ObservableKey == 'email-addr:value' | distinct ObservableValue;\nlet ti_domains = TI | where ObservableKey == 'domain-name:value' | distinct ObservableValue;\nlet ti_urls = TI | where ObservableKey == 'url:value' | distinct ObservableValue;\nlet ti_sha256 = TI | where ObservableKey has 'file:hashes' | distinct ObservableValue;\nlet ti_ips = TI | where ObservableKey in ('ipv4-addr:value','network-traffic:src_ref.value') | distinct ObservableValue;\nEmailEvents\n| where TimeGenerated > ago(lookback) and TimeGenerated < ago(2d)\n| where EmailDirection == 'Inbound'\n| where DeliveryAction == 'Delivered'\n| join kind=inner (EmailAttachmentInfo | where TimeGenerated > ago(lookback) | project NetworkMessageId, FileType, SHA256) on NetworkMessageId\n| join kind=leftouter (EmailUrlInfo | where TimeGenerated > ago(lookback) | project NetworkMessageId, UrlDomain, Url) on NetworkMessageId\n| extend match = case(\n    SenderFromAddress in (ti_senders), 'sender',\n    UrlDomain in (ti_domains), 'url-domain',\n    Url in (ti_urls), 'url-exact',\n    SHA256 in (ti_sha256), 'attachment-sha256',\n    SenderIPv4 in (ti_ips), 'sender-ip',\n    '')\n| where match != ''\n| project Timestamp = TimeGenerated, NetworkMessageId, RecipientEmailAddress, SenderFromAddress, Subject, match",
                   "timespan": "P1D"
                 }
               }
@@ -135,12 +156,17 @@
             "Were_any_matches_found": {
               "type": "If",
               "runAfter": {
-                "Run_TI_sweep_query": [ "Succeeded" ]
+                "Run_TI_sweep_query": [
+                  "Succeeded"
+                ]
               },
               "expression": {
                 "and": [
                   {
-                    "greater": [ "@length(body('Run_TI_sweep_query')?['tables']?[0]?['rows'])", 0 ]
+                    "greater": [
+                      "@length(body('Run_TI_sweep_query')?['tables']?[0]?['rows'])",
+                      0
+                    ]
                   }
                 ]
               },
@@ -155,7 +181,9 @@
                 "Post_Teams_approval_card": {
                   "type": "ApiConnectionWebhook",
                   "runAfter": {
-                    "Compose_summary": [ "Succeeded" ]
+                    "Compose_summary": [
+                      "Succeeded"
+                    ]
                   },
                   "inputs": {
                     "host": {
@@ -179,12 +207,17 @@
                 "On_approval_branch": {
                   "type": "If",
                   "runAfter": {
-                    "Post_Teams_approval_card": [ "Succeeded" ]
+                    "Post_Teams_approval_card": [
+                      "Succeeded"
+                    ]
                   },
                   "expression": {
                     "and": [
                       {
-                        "equals": [ "@body('Post_Teams_approval_card')?['selectedOption']", "Approve" ]
+                        "equals": [
+                          "@body('Post_Teams_approval_card')?['selectedOption']",
+                          "Approve"
+                        ]
                       }
                     ]
                   },
@@ -197,23 +230,77 @@
                           "type": "Http",
                           "inputs": {
                             "method": "POST",
-                            "uri": "https://api.security.microsoft.com/api/messages/takeAction",
+                            "uri": "https://graph.microsoft.com/beta/security/collaboration/analyzedEmails/remediate",
                             "headers": {
                               "Content-Type": "application/json"
                             },
                             "authentication": {
                               "type": "ManagedServiceIdentity",
-                              "audience": "https://api.security.microsoft.com"
+                              "audience": "https://graph.microsoft.com"
                             },
                             "body": {
-                              "NetworkMessageIds": [ "@item()[1]" ],
-                              "ActionType": "SoftDelete",
-                              "Justification": "TI sweep auto-remediation. Tenant id: @{parameters('TenantId')}"
+                              "displayName": "P2 TI sweep remediation",
+                              "description": "TI sweep auto-remediation. Tenant id: @{parameters('TenantId')}",
+                              "severity": "high",
+                              "action": "softDelete",
+                              "remediateSendersCopy": false,
+                              "analyzedEmails": [
+                                {
+                                  "networkMessageId": "@item()[1]",
+                                  "recipientEmailAddress": "@item()[2]"
+                                }
+                              ]
                             }
                           },
                           "runtimeConfiguration": {
                             "concurrency": {
                               "repetitions": 5
+                            }
+                          }
+                        },
+                        "Fallback_GA_ComplianceSearch_purge": {
+                          "type": "If",
+                          "runAfter": {
+                            "Call_Defender_TakeAction": [
+                              "Failed",
+                              "TimedOut"
+                            ]
+                          },
+                          "expression": {
+                            "and": [
+                              {
+                                "not": {
+                                  "equals": [
+                                    "@parameters('GaRemediationWebhookUrl')",
+                                    ""
+                                  ]
+                                }
+                              }
+                            ]
+                          },
+                          "actions": {
+                            "Post_GA_purge_request": {
+                              "type": "Http",
+                              "inputs": {
+                                "method": "POST",
+                                "uri": "@parameters('GaRemediationWebhookUrl')",
+                                "headers": {
+                                  "Content-Type": "application/json"
+                                },
+                                "body": {
+                                  "method": "ComplianceSearchAction-Purge",
+                                  "purgeType": "SoftDelete",
+                                  "reason": "GA fallback after Graph beta remediate failed in P2-ti-sweep-remediate",
+                                  "action": "softDelete",
+                                  "displayName": "P2 TI sweep remediation",
+                                  "analyzedEmails": [
+                                    {
+                                      "networkMessageId": "@item()[1]",
+                                      "recipientEmailAddress": "@item()[2]"
+                                    }
+                                  ]
+                                }
+                              }
                             }
                           }
                         }

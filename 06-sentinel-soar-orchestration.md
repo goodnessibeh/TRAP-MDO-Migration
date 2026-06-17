@@ -260,13 +260,14 @@ KQL pattern for joining email events with TI:
 ```kusto
 let phishUrls = ThreatIntelIndicators
   | where ValidUntil > now()
-  | where ObservableType == "url"
-  | where ConfidenceScore >= 70
-  | project IocUrl = ObservableValue, ConfidenceScore, ThreatType;
+  | where ObservableKey == "url:value"
+  | where Confidence >= 70
+  | extend ThreatType = tostring(Data.indicator_types[0])
+  | project IocUrl = ObservableValue, Confidence, ThreatType;
 EmailUrlInfo
 | where TimeGenerated > ago(7d)
 | join kind=inner phishUrls on $left.Url == $right.IocUrl
-| project TimeGenerated, NetworkMessageId, Url, ThreatType, ConfidenceScore
+| project TimeGenerated, NetworkMessageId, Url, ThreatType, Confidence
 ```
 
 Wrap this in a scheduled analytics rule that runs every 30 min over a 1-hour

@@ -15,7 +15,7 @@ our SOC's specifics.
 
 | Decision | Default | Override how |
 |---|---|---|
-| Delete type | `SoftDelete` | Change `ActionType` in `Call_TakeAction_softdelete` action, but get legal sign-off first |
+| Delete type | `softDelete` | Change `action` in `Call_TakeAction_softdelete` action (e.g. `hardDelete`), but get legal sign-off first |
 | Approval tiers | Single Teams card | Deploy P6 and pass its callback URL as `VipEscalationPlaybook` |
 | VIP detection | Sentinel watchlist `VIP_Mailboxes` (column `SearchKey`) | Edit `Query_VIP_watchlist` action or pass `-VipWatchlistAlias` |
 | Cross-vendor enrichment | None | Add an HTTP step before `Compute_VIP_intersection` calling VirusTotal/MDTI/AbuseIPDB |
