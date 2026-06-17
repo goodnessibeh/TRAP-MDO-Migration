@@ -21,11 +21,31 @@ automation/
 │   ├── mdo-operational-dashboard.json    [shipped]
 │   ├── trap-mdo-parallel-run.json        [shipped]
 │   └── README.md
-└── tests/
-    ├── Test-LogicAppTemplate.ps1        # ARM static validator
-    ├── Test-WorkbookSchema.ps1          # Sentinel workbook static validator
-    └── Invoke-AutomationValidation.ps1  # one-shot runner for both
+├── tests/
+│   ├── Test-LogicAppTemplate.ps1        # ARM static validator
+│   ├── Test-WorkbookSchema.ps1          # Sentinel workbook static validator
+│   └── Invoke-AutomationValidation.ps1  # one-shot runner for both
+└── security-copilot/                    # Security Copilot agentic uplift (reference, not ARM)
+    ├── README.md                        # Capability-to-project map + agent catalogue
+    ├── 01-phishing-triage-agent.md      # Autonomous user-reported-phish triage
+    ├── 02-copilot-in-defender-and-sentinel.md  # Summary, guided response, NL-to-KQL
+    ├── 03-promptbook-library.md         # Project-specific promptbooks
+    ├── 04-licensing-scu-governance.md   # SCU sizing, identity, RBAC, audit
+    └── 05-zero-touch-phishing-pipeline.md      # End-to-end manual-work-elimination chain
 ```
+
+## Security Copilot (reference, not deployable templates)
+
+[`security-copilot/`](./security-copilot/) documents how Microsoft
+Security Copilot extends this stack, with the explicit goal of
+eliminating manual SOC work on user-reported phishing as far as is safe.
+Unlike the rest of this directory, it ships no ARM. Copilot agents are
+configured in the Defender, Sentinel, and Entra portals, so the artefact
+is the decision record, setup runbooks, identity/RBAC and SCU model, and
+a project-specific promptbook library. Start at
+[`security-copilot/README.md`](./security-copilot/README.md), then read
+[`05-zero-touch-phishing-pipeline.md`](./security-copilot/05-zero-touch-phishing-pipeline.md)
+for the automation through-line.
 
 ## What this directory ships
 
